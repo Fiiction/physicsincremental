@@ -47,13 +47,12 @@ export class GameAudio {
     this.game=game;this.profile=game?.profile;this.chapter=game?.profile?.chapter||0;this.visibility=visibility;
     const settings=game?.profile?.settings||this.settings;
     this.settings={sound:settings.sound!==false,music:settings.music===true,soundVolume:volume(settings.soundVolume,.7),musicVolume:volume(settings.musicVolume,.35)};
-    const hidden=visibility.hidden??globalThis.document?.hidden??false;
-    if(hidden&&!this.hidden){this.stopMusic();this.stopVoices();}
-    this.hidden=hidden;this.paused=visibility.paused??game?.paused??false;
+    // Visibility is diagnostic only: the same live session keeps its audible mix.
+    this.hidden=visibility.hidden??globalThis.document?.hidden??false;this.paused=visibility.paused??game?.paused??false;
     const c=this.context;if(!c)return;
-    const mixKey=`${hidden}:${this.settings.sound}:${this.settings.soundVolume}:${this.settings.music}:${this.settings.musicVolume}:${this.paused}:${game?.state}`;
+    const mixKey=`${this.settings.sound}:${this.settings.soundVolume}:${this.settings.music}:${this.settings.musicVolume}:${this.paused}:${game?.state}`;
     if(mixKey!==this.mixKey){
-      this.mixKey=mixKey;this.ramp(this.master.gain,hidden?0:this.config.masterVolume,.08);
+      this.mixKey=mixKey;this.ramp(this.master.gain,this.config.masterVolume,.08);
       this.ramp(this.sfx.gain,this.settings.sound?this.settings.soundVolume:0,.04);
       const menu=this.paused?this.config.music.menuMultiplier:game?.state==='ended'?this.config.music.endedMultiplier:1;
       this.ramp(this.musicBus.gain,this.settings.music?this.settings.musicVolume*menu:0,.2);
@@ -64,7 +63,7 @@ export class GameAudio {
     const phase=active?(boss.hp/boss.maxHP<.33?2:boss.hp/boss.maxHP<.66?1:0):0;
     if(active&&phase>this.bossPhase&&!this.paused)this.cue('bossPhase',{x:boss.x+16});
     this.bossPhase=phase;
-    if(hidden||!this.settings.music||this.settings.musicVolume===0){if(this.loop||this.starting)this.stopMusic();return;}
+    if(!this.settings.music||this.settings.musicVolume===0){if(this.loop||this.starting)this.stopMusic();return;}
     if(c.state!=='running')return;
     if(!this.loop&&!this.starting&&!this.failures.has(this.config.music.file))this.startMusic();
     if(this.loop&&this.loop.boss!==active){
@@ -82,7 +81,7 @@ export class GameAudio {
     const buffer=await this.load(this.config.music.file);
     if(generation!==this.generation)return;
     this.starting=false;
-    if(!buffer||this.destroyed||this.hidden||!this.settings.music||this.settings.musicVolume===0||this.loop)return;
+    if(!buffer||this.destroyed||!this.settings.music||this.settings.musicVolume===0||this.loop)return;
     const c=this.context,source=c.createBufferSource(),gain=c.createGain(),filter=c.createBiquadFilter();
     source.buffer=buffer;source.loop=true;source.playbackRate.value=2**((this.config.music.chapterSemitones[this.chapter]||0)/12);
     gain.gain.value=0;filter.type='lowpass';filter.frequency.value=this.config.music.chapterFilterHz[this.chapter]||1800;filter.Q.value=.45;
@@ -102,7 +101,7 @@ export class GameAudio {
   stopVoices(bus) {for(const voice of this.voices)if(!bus||voice.bus===bus)this.stopVoice(voice);}
   sample(id,options={}) {
     const c=this.context,bus=options.bus||'sfx',buffer=this.buffers.get(this.config.samples[id]);
-    if(!c||c.state!=='running'||!buffer||this.hidden||this.destroyed||!(bus==='music'?this.settings.music&&this.settings.musicVolume>0:this.settings.sound&&this.settings.soundVolume>0))return false;
+    if(!c||c.state!=='running'||!buffer||this.destroyed||!(bus==='music'?this.settings.music&&this.settings.musicVolume>0:this.settings.sound&&this.settings.soundVolume>0))return false;
     const priority=options.priority||0;
     if(this.voices.size>=this.config.maxVoices){
       const oldest=[...this.voices].sort((a,b)=>a.priority-b.priority||a.started-b.started)[0];
@@ -120,7 +119,7 @@ export class GameAudio {
   }
   cue(kind,event={}) {
     const cue=this.config.cues[kind],c=this.context;
-    if(!cue||!c||c.state!=='running'||this.hidden||!this.settings.sound)return false;
+    if(!cue||!c||c.state!=='running'||!this.settings.sound)return false;
     if(c.currentTime-(this.cooldowns.get(kind)??-Infinity)<cue.cooldown)return false;
     const sample=cue.samples[Math.floor(Math.random()*cue.samples.length)];
     const progress=kind==='break'?Math.min(5,Math.floor(Math.log2(1+(event.combo||0)/3))):0;
@@ -136,7 +135,7 @@ export class GameAudio {
   }
   events(events,game=this.game) {
     if(game!==this.game)this.update(game,this.visibility);
-    if(this.hidden||this.paused)return;
+    if(this.paused)return;
     const cues=new Map(),broken=new Set(events.filter(e=>e.type==='break').map(e=>e.id));
     for(const event of events){
       let kind=eventCues[event.type];

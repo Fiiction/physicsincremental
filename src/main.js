@@ -1,7 +1,8 @@
 import data from './data/balance.json';
 import { Game, createProfile, sanitizeProfile, upgradeCost, upgradeStatus } from './game.js';
 import { Renderer } from './renderer.js';
-import { advanceRealtime, idleSnapshot } from './idle.js';
+import { idleSnapshot } from './idle.js';
+import { FrameLoop } from './frame-loop.js';
 import { researchBranches, researchGroup, researchScene, attachResearchCamera, applyResearchCamera, zoomResearch, focusResearchNode } from './research-view.js';
 import './style.css';
 
@@ -17,7 +18,7 @@ try { profile = saved ? sanitizeProfile(saved.profile, data) : createProfile(); 
 let game = new Game(data, profile);
 if (saved?.run) game.restore(saved.run);
 let view, modal = '', uiClock = 0, saveClock = 0, practiceBackup = null, practicePaused = false, practiceKind = '', practiceDrop = 'arc', pausedBeforeModal = false, selectedTech = 'power';
-let background = null, backgroundEpoch = 0, simulatedThrough = Date.now();
+let loop, simulatedThrough = Date.now();
 // Old versions stored a background-replay marker. Live play never replays saved time.
 try { sessionStorage.removeItem(SAVE_KEY + '.background'); } catch { /* Optional legacy cleanup. */ }
 const researchView = {zoom:1,x:0,y:0,recent:null};
@@ -54,8 +55,7 @@ document.getElementById('app').innerHTML = `
 
 function save() {
   if (practiceBackup) return;
-  const checkpoint = background?.checkpoint;
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify(checkpoint ? { profile: checkpoint.profile, run: checkpoint.run, savedAt: checkpoint.through } : { profile: game.profile, run: idleSnapshot(game, manualPause()), savedAt: simulatedThrough })); setHTML('save-status', '进度已自动保存'); }
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ profile: game.profile, run: idleSnapshot(game, manualPause()), savedAt: simulatedThrough })); setHTML('save-status', '进度已自动保存'); }
   catch { setHTML('save-status', '浏览器存储不可用，请导出存档'); }
 }
 function toast(message) { $('toast').textContent = message; $('toast').classList.add('visible'); clearTimeout(toast.timer); toast.timer = setTimeout(() => $('toast').classList.remove('visible'), 3000); }
@@ -114,6 +114,18 @@ function techTree() {
 }
 function updateUI() {
   const p = game.profile, c = game.chapter, stats = game.stats;
+  if (modal === 'tech') {
+    const wallet = document.querySelector('.modal-wallet');
+    if (wallet && wallet.dataset.coins !== String(p.coins)) {
+      wallet.dataset.coins = String(p.coins); wallet.textContent = `✦ ${format(p.coins)}`;
+      for (const node of document.querySelectorAll('.research-node.poor, .research-node.available')) {
+        const affordable = upgradeStatus(data, p, node.dataset.tech) === 'available';
+        node.classList.toggle('available', affordable); node.classList.toggle('poor', !affordable);
+      }
+      const buy = document.querySelector('[data-buy]');
+      if (buy) buy.disabled = upgradeStatus(data, p, buy.dataset.buy) !== 'available';
+    }
+  }
   const frontier = p.frontierChapter ?? p.chapter, isFrontier = game.isFrontier ?? p.chapter === frontier;
   $('wallet').textContent = format(p.coins); $('chapter-index').textContent = `0${p.chapter + 1}`; $('chapter-name').textContent = c.name;
   const goals = [['◩', '本局清场', Math.floor(game.clearRatio*100), Math.round(c.clearRatio*100), '%'], ['◆', '累计核心', p.stageCores, c.cores, ''], ['×', '最高连击', p.stageCombo, c.combo, '']];
@@ -166,7 +178,6 @@ function updateUI() {
   renderOverlay();
 }
 function renderOverlay() {
-  if (background && !isBackgroundPage()) { setHTML('arena-overlay', '<div class="pause-card"><span class="resume-loading" role="status" aria-label="恢复后台进度">◌</span></div>'); return; }
   if (game.bossVictoryLeft>0 && !game.paused) { setHTML('arena-overlay',''); return; }
   if (game.pendingChapterSelection) {
     setHTML('arena-overlay', '<div class="settlement"><h2>突破完成</h2><button class="primary-button" data-action="chapters">选择下一站 →</button></div>');
@@ -179,27 +190,25 @@ function renderOverlay() {
   setHTML('arena-overlay', `<div class="settlement ${failed?'boss-failed':''}"><h2>${game.run.bossDefeated ? '首领已击破' : failed ? '守卫未破' : game.goalComplete ? '区域完成' : '开采完成'}</h2>${failed?`<div class="boss-remnant" style="--damage:${1-game.boss.hp/game.boss.maxHP}" aria-hidden="true"></div><p class="boss-result">${game.chapter.boss.name} · 剩余 ${remaining}%</p>`:''}<div class="result-income"><span>✦</span>+${format(game.run.coins)}</div><div class="result-stats"><span title="击碎方块">□ <b>${game.run.kills}</b></span><span title="最高连击">× <b>${game.run.combo}</b></span></div><div class="result-actions"><button class="secondary-button" data-action="tech">升级</button><button class="secondary-button" data-action="chapters">选关</button><button class="primary-button" data-action="${practiceBackup ? 'leave-practice' : game.goalComplete ? 'advance' : 'restart'}">${practiceBackup ? '退出试玩' : game.goalComplete ? '突破 →' : failed ? '再挑战 →' : '继续 →'}</button></div>${practiceBackup?'<small>独立试玩 · 不影响存档</small>':failed?'<small>矿晶已保留 · 下局重新挑战</small>':game.auto ? `<small>${game.goalComplete ? '突破后选择下一站' : '自动续局'}</small>` : ''}</div>`);
 }
 function onAction(type, payload) {
-  if (background || document.hidden) return;
   if (type === 'frame') {
-    const now = Date.now(), elapsed = Math.max(0, now - simulatedThrough) / 1000;
-    simulatedThrough = now;
+    simulatedThrough = Date.now();
     if (view.drag && game.state === 'ready') game.idleTime = 0;
-    if (game.auto) advanceRealtime(game, elapsed, false); else game.tick(payload);
+    game.tick(payload);
     const events = game.events.splice(0);
     for (const e of events) {
       if (e.type === 'shotend' && e.timeout) toast('弹射结束');
       if (e.type === 'drop' && ['cache','charge'].includes(e.id)) document.querySelector(e.id==='charge'?'.shots-box':'.wallet').animate([{transform:'scale(1)'},{transform:'scale(1.22)'},{transform:'scale(1)'}],{duration:420});
       if (['runend', 'core', 'upgrade'].includes(e.type)) { console.info('[COREBOUND]', game.logs.at(-1)); save(); }
     }
-    view.events(events); view.render(payload);
+    view.events(events); view.render(payload); view.app.render();
     uiClock += payload; saveClock += payload;
     if (uiClock > 0.12) { updateUI(); uiClock = 0; }
-    if (saveClock > 2) { save(); saveClock = 0; }
+    if (saveClock >= 1) { save(); saveClock = 0; updateTitle(); }
   } else if (type === 'launch') { if (settleClock() && game.launch(payload.angle, payload.power)) { updateUI(); save(); } }
   else if (type === 'hint') toast(payload);
 }
 function action(name) {
-  if (background || !settleClock()) return;
+  if (!settleClock()) return;
   view?.unlockAudio();
   view?.audio.ui('tap');
   if (name === 'play') closeModal();
@@ -225,7 +234,7 @@ function action(name) {
   else openModal(name);
 }
 document.addEventListener('click', event => {
-  if (background || !settleClock()) return;
+  if (!settleClock()) return;
   const buy = event.target.closest('[data-buy]');
   if (buy && game.buy(buy.dataset.buy)) { researchView.recent=buy.dataset.buy; view?.unlockAudio(); view?.audio.ui('buy'); toast('已研究：' + data.upgrades.find(u => u.id === buy.dataset.buy).name); updateUI(); if (modal === 'tech') {renderModal();document.querySelector('[data-buy]')?.focus({preventScroll:true});} save(); }
   const button = event.target.closest('[data-action]'); if (button) action(button.dataset.action);
@@ -257,17 +266,16 @@ document.addEventListener('click', event => {
   const goal = event.target.closest('[data-goal]'); if (goal) toast(goal.dataset.goal);
 });
 function openModal(name) {
-  if (background || !settleClock()) return;
+  if (!settleClock()) return;
   if (!modal) pausedBeforeModal = game.paused;
   if(name==='tech'&&!modal) {Object.assign(researchView,{zoom:1,x:0,y:0,recent:null});selectedTech=null;}
-  modal = name; game.paused = true; view.drag = null; renderModal();
+  modal = name; game.paused = pausedBeforeModal || !game.auto; view.menuOpen = true; view.drag = null; renderModal();
   if (!$('dialog').open) $('dialog').showModal();
   if(name==='tech')applyResearchCamera(document.querySelector('.research-viewport'),researchView);
 }
 function closeModal() {
-  if (background) return;
   simulatedThrough = Date.now();
-  cleanupResearchCamera?.();cleanupResearchCamera=null;$('dialog').close(); modal = ''; game.paused = pausedBeforeModal; updateUI();
+  cleanupResearchCamera?.();cleanupResearchCamera=null;$('dialog').close(); modal = ''; view.menuOpen = false; game.paused = pausedBeforeModal; updateUI();
 }
 function relicDemo(id) {
   const geometry = id==='heart' ? '<path class="demo-flash" d="M32 94 L194 30 M32 94 L200 98"/><circle cx="32" cy="94" r="5"/><rect class="demo-ore" x="111" y="56" width="15" height="15"/>' : id==='mint' ? '<circle class="demo-spring" cx="130" cy="70" r="12"/><circle cx="130" cy="70" r="4"/><rect class="demo-ore" x="121" y="61" width="18" height="18"/>' : id==='fusion' ? '<path class="demo-flash" d="M120 75 L45 40 M120 75 L198 42 M120 75 L174 111"/><circle class="demo-spring" cx="45" cy="40" r="8"/><circle class="demo-spring" cx="198" cy="42" r="8"/><circle class="demo-spring" cx="174" cy="111" r="8"/><circle cx="120" cy="75" r="4"/>' : '<path class="demo-path" d="M32 94 L146 30 L204 84"/><path class="demo-flash" d="M204 84 L32 94"/><rect class="demo-ore" x="112" y="81" width="16" height="16"/>';
@@ -332,7 +340,7 @@ function renderModal() {
     content += `<div class="help-list"><p><b>拖拽圆球</b><span>反向发射，拉远蓄力</span></p><p><b>↑ ↓ ← → / 空格</b><span>瞄准 / 满力发射</span></p><p><b>A / P</b><span>自动 / 暂停</span></p><p><b>方形空洞</b><span>边长随损伤增加</span></p><p><b>◇ / ♛</b><span>普通宝箱 / 稀有宝库；透视可见内容</span></p><p><b>× 连击</b><span>十连色散 · 连击推动色相</span></p><p><b>中心首领</b><span>清场唤醒 · 用剩余弹射击破后过关</span></p><p><b>挑战失败</b><span>保留矿晶；升级后下局重新唤醒满血首领</span></p><p><b>折跃门</b><span>第三关起双向传送</span></p><p><b>终光裁切</b><span>第五关每 40 连击斜交切割</span></p><p><b>热尾 / 卫星 / 波纹 / 蓝芯</b><span>动能 / 分裂 / 冲击 / 穿透</span></p></div><p class="fine-print">选关可重返已解锁区域。强化每局重置，下一发生效，满层转矿晶。自动引航后台可继续开采。</p>`;
   } else if (modal === 'settings') {
     content = title('设置');
-    content += '<details class="background-help"><summary>后台挂机</summary><p>自动开启后，切标签、最小化或切到其它窗口仍会实时开采并保存。主线击破后等待你选择突破奖励。</p><p>长时间挂机，可在 Chrome 或 Edge 的「性能」设置中，将本站加入「始终保持这些网站活跃」。浏览器强制休眠或电脑睡眠时会暂停；恢复后继续，不补算停顿时间。</p><p><a href="https://support.google.com/chrome/answer/12929150?hl=zh-Hans" target="_blank" rel="noopener noreferrer">Chrome 设置说明 ↗</a> · <a href="https://support.microsoft.com/en-us/edge/learn-about-performance-features-in-microsoft-edge" target="_blank" rel="noopener noreferrer">Edge 设置说明 ↗</a></p></details>';
+    content += '<details class="background-help"><summary>后台挂机</summary><p>前后台使用同一局游戏，切换窗口无需加载交接。自动开启后持续开采，画面和已开启的声音照常运行；主线击破后等待你选择突破奖励。</p><p>长时间挂机，可在 Chrome 或 Edge 的「性能」设置中，将本站加入「始终保持这些网站活跃」。浏览器强制休眠或电脑睡眠时会暂停；恢复后继续，不补算停顿时间。</p><p><a href="https://support.google.com/chrome/answer/12929150?hl=zh-Hans" target="_blank" rel="noopener noreferrer">Chrome 设置说明 ↗</a> · <a href="https://support.microsoft.com/en-us/edge/learn-about-performance-features-in-microsoft-edge" target="_blank" rel="noopener noreferrer">Edge 设置说明 ↗</a></p></details>';
     content += `<div class="audio-settings">${[['sound','音效','soundVolume'],['music','背景音乐','musicVolume']].map(([key,name,volume])=>`<div class="audio-setting"><label><b>${name}</b><input type="checkbox" data-setting="${key}" ${p.settings[key]?'checked':''}></label><input type="range" min="0" max="100" step="1" value="${Math.round(p.settings[volume]*100)}" data-volume="${volume}" aria-label="${name}音量" /></div>`).join('')}</div><div class="settings-list">${[['shake', '震动'], ['particles', '碎片'], ['reducedEffects', '柔和特效']].map(([id, name]) => `<label><b>${name}${id==='reducedEffects'?'<small>关闭全屏染色，减少动效</small>':''}</b><input type="checkbox" data-setting="${id}" ${p.settings[id] ? 'checked' : ''}></label>`).join('')}</div><h3 class="subheading">存档</h3><div class="settings-actions"><button class="secondary-button" data-action="export">导出</button><button class="secondary-button" data-action="import">导入</button><button class="secondary-button" data-action="recover">恢复备份</button></div><div class="settings-links"><button class="text-button" data-action="help">操作</button><button class="text-button" data-action="logs">日志</button><button class="text-button danger" data-action="reset">重置</button></div>`;
   } else if (modal === 'reset') {
     content = title('重置进度') + '<p class="fine-print">当前进度将备份到本机，可在设置中恢复。</p>';
@@ -353,7 +361,7 @@ function download(name, content) {
   const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 function enterChapter(chapter) {
-  if (background || document.hidden || !settleClock()) return false;
+  if (document.hidden || !settleClock()) return false;
   const mining = practiceBackup || game;
   if (!mining.selectChapter(chapter)) return false;
   game = mining; practiceBackup = null; view.game = game; view.drag = null; view.rebuild();
@@ -361,7 +369,7 @@ function enterChapter(chapter) {
   return true;
 }
 function startPractice(chapter, relic) {
-  if (background || document.hidden || !settleClock()) return false;
+  if (document.hidden || !settleClock()) return false;
   if (!Number.isInteger(chapter) || chapter < 0 || chapter >= data.chapters.length) return false;
   if (!practiceBackup) { save(); practicePaused = modal ? pausedBeforeModal : game.paused; practiceBackup = game; }
   practiceKind = relic || '';
@@ -399,24 +407,24 @@ function startPractice(chapter, relic) {
   toast(relic==='treasure' ? '宝库试玩 · 拖拽发射，切换下发强化' : relic==='endgame' ? '终局试玩 · 拖拽发射' : '试玩 · 不影响存档'); return true;
 }
 function leavePractice() {
-  if (background || document.hidden || !settleClock()) return false;
+  if (document.hidden || !settleClock()) return false;
   if (!practiceBackup) return false;
   game = practiceBackup; practiceBackup = null; practiceKind = ''; view.game = game; view.rebuild(); pausedBeforeModal = practicePaused; closeModal(); save(); return true;
 }
 document.addEventListener('change', event => {
-  if (event.target.dataset.setting) { view?.unlockAudio(); game.profile.settings[event.target.dataset.setting] = event.target.checked; view?.audio.update(game, { hidden: document.hidden, paused: game.paused }); save(); updateUI(); }
+  if (event.target.dataset.setting) { view?.unlockAudio(); game.profile.settings[event.target.dataset.setting] = event.target.checked; view?.audio.update(game, { hidden: document.hidden, paused: game.paused || !!modal }); save(); updateUI(); }
   if (event.target.dataset.volume) save();
 });
 document.addEventListener('input', event => {
   const key=event.target.dataset.volume;
-  if (['soundVolume','musicVolume'].includes(key)) { view?.unlockAudio(); game.profile.settings[key]=Math.max(0,Math.min(1,Number(event.target.value)/100)); view?.audio.update(game, { hidden: document.hidden, paused: game.paused }); }
+  if (['soundVolume','musicVolume'].includes(key)) { view?.unlockAudio(); game.profile.settings[key]=Math.max(0,Math.min(1,Number(event.target.value)/100)); view?.audio.update(game, { hidden: document.hidden, paused: game.paused || !!modal }); }
 });
 $('import-file').addEventListener('change', async event => {
   const file = event.target.files[0]; if (!file) return;
   try {
     if (file.size > 2_000_000) throw new Error('存档文件过大');
     const input = JSON.parse(await file.text()), p = sanitizeProfile(input.profile, data), imported = new Game(data, p);
-    if (background || document.hidden) throw new Error('请回到游戏界面后重新导入');
+    if (document.hidden) throw new Error('请回到游戏界面后重新导入');
     if (input.run && !imported.restore(input.run)) throw new Error('本局数据损坏，未覆盖现有进度');
     localStorage.setItem(SAVE_KEY + '.backup', JSON.stringify({ profile: (practiceBackup || game).profile, run: (practiceBackup || game).snapshot() }));
     game = imported; practiceBackup = null; view.game = game; view.rebuild(); pausedBeforeModal = false; closeModal(); save(); toast('存档导入成功');
@@ -425,7 +433,7 @@ $('import-file').addEventListener('change', async event => {
 });
 $('dialog').addEventListener('cancel', e => { e.preventDefault(); closeModal(); });
 window.addEventListener('keydown', e => {
-  if (background || modal || ['INPUT', 'TEXTAREA', 'BUTTON'].includes(e.target.tagName)) return;
+  if (modal || ['INPUT', 'TEXTAREA', 'BUTTON'].includes(e.target.tagName)) return;
   if (e.code === 'Space') { e.preventDefault(); view?.unlockAudio(); if (game.state === 'ready') onAction('launch', { angle: view.aim, power: 1 }); else if (game.state === 'ended') action(game.goalComplete ? 'advance' : 'restart'); }
   const directions = { ArrowUp: -Math.PI / 2, ArrowDown: Math.PI / 2, ArrowLeft: Math.PI, ArrowRight: 0 };
   if (e.code in directions) { e.preventDefault(); view.aim = directions[e.code]; view.keyboardAim = true; }
@@ -435,114 +443,50 @@ window.addEventListener('keydown', e => {
 function manualPause() { return modal ? pausedBeforeModal : game.paused; }
 // Embedded browsers may keep visibilityState='visible' after the player switches away.
 function isBackgroundPage() { return document.hidden || document.hasFocus?.() === false; }
-function canIdle() {
-  return game.auto && game.level.idle && !manualPause() && !game.pendingChapterSelection && !(game.state === 'ended' && game.goalComplete);
-}
+
 // Changes start now, never at an old save or suspended-frame timestamp.
 function settleClock() {
-  if (background) return false;
+  loop?.reset();
   simulatedThrough = Date.now();
   return true;
 }
-function receiveBackground(packet) {
-  if (!background || packet.epoch !== background.epoch || packet.sequence <= background.sequence) return;
-  background.sequence = packet.sequence; background.checkpoint = packet; save();
-  if (isBackgroundPage()) document.title = `✦ ${format(packet.profile.coins)} · 核芯弹射`;
-  if (!packet.finished) return;
-  background.worker?.terminate();
-  game = new Game(data, packet.profile); game.restore(packet.run); game.events.length = 0;
-  simulatedThrough = packet.through;
-  if (packet.runtime?.interruptedSeconds > 0) game.log('background_interrupted', {seconds:Math.round(packet.runtime.interruptedSeconds),replayed:false});
-  if (modal) { pausedBeforeModal = game.paused; game.paused = true; }
-  background = null; view.game = game; view.rebuild();
-  if (modal) renderModal();
-  updateUI(); save(); syncBackground();
+function updateTitle() {
+  document.title = isBackgroundPage() ? `✦ ${format(game.profile.coins)} · 核芯弹射` : '核芯弹射 · COREBOUND';
 }
-function recoverBackground() {
-  const session = background, latest = session.checkpoint;
-  session.worker?.terminate(); session.worker = null;
-  const mining = new Game(data, latest.profile); mining.restore(latest.run);
-  let through = Date.now(), published = 0;
-  const runtime = {...(latest.runtime || {ticks:0,simulatedSeconds:0,interruptedSeconds:0})};
-  // Workers are preferred; the fallback also advances live ticks, never old checkpoints.
-  function pump() {
-    if (background !== session) return;
-    const now = Date.now(), seconds = Math.max(0,now-through)/1000;
-    through = now;
-    runtime.simulatedSeconds += advanceRealtime(mining,seconds);
-    if (seconds > (data.idleRuntime?.maxTickSeconds ?? 2)) runtime.interruptedSeconds += seconds;
-    runtime.ticks++;
-    const finished = session.ending;
-    if (finished || now - published >= (data.idleRuntime?.publishMs ?? 1000)) {
-      receiveBackground({epoch:session.epoch,sequence:session.sequence+1,through,profile:structuredClone(mining.profile),run:mining.snapshot(),runtime:{...runtime},finished});
-      published = now;
-    }
-    if (!finished) setTimeout(pump, data.idleRuntime?.intervalMs ?? 250);
-  }
-  pump();
-}
-function startBackground() {
-  if (background || !view || !canIdle()) return;
-  view.drag = null;
-  const epoch = ++backgroundEpoch, checkpoint = {profile:structuredClone(game.profile),run:idleSnapshot(game,manualPause()),through:simulatedThrough};
-  background = {worker:null,epoch,checkpoint,sequence:0,ending:!isBackgroundPage()};
-  save(); renderOverlay();
-  let worker;
-  try {
-    worker = new Worker(new URL('./idle-worker.js', import.meta.url), {type:'module'});
-    background.worker = worker;
-    worker.onmessage = ({data:packet}) => { if (background?.worker === worker) receiveBackground(packet); };
-    worker.onerror = event => {
-      if (background?.worker !== worker) return;
-      event.preventDefault?.(); recoverBackground();
-      console.warn('[COREBOUND] Background worker stopped; live timer resumed from the last checkpoint.');
-    };
-    worker.postMessage({type:'start',epoch,balance:data,...checkpoint,ending:background.ending});
-  } catch { recoverBackground(); }
-}
-function syncBackground() {
+function syncPresence() {
   if (!view) return;
-  const away = isBackgroundPage();
-  if (!away) document.title = '核芯弹射 · COREBOUND';
-  view.audio.update(game, {hidden:away,paused:game.paused});
-  if (background) {
-    if (!away && !background.ending) {
-      background.ending = true; background.worker?.postMessage({type:'finish'}); renderOverlay();
-    }
-  } else if (canIdle() && (away || (!modal && Date.now()-simulatedThrough>250))) startBackground();
-  else {
-    simulatedThrough = Date.now();
-    save();
-  }
+  if (isBackgroundPage()) view.drag = null;
+  view.audio.update(game, { hidden: document.hidden, paused: game.paused || !!modal });
+  updateTitle(); save();
 }
-document.addEventListener('visibilitychange', syncBackground);
-document.addEventListener('freeze', syncBackground);
-document.addEventListener('resume', syncBackground);
-window.addEventListener('pageshow', syncBackground);
-window.addEventListener('blur', syncBackground);
-window.addEventListener('focus', syncBackground);
-window.addEventListener('pagehide', () => { syncBackground(); save(); });
-// Embedded/occluded pages can stop animation frames without a visibility event.
-setInterval(() => {
-  if (!view || background) return;
-  if (isBackgroundPage() || Date.now()-simulatedThrough>500) syncBackground();
-}, 1000);
+document.addEventListener('visibilitychange', syncPresence);
+window.addEventListener('blur', syncPresence);
+window.addEventListener('focus', syncPresence);
+window.addEventListener('pagehide', () => { save(); loop?.stop(); });
+window.addEventListener('pageshow', () => { loop?.start(); syncPresence(); });
+document.addEventListener('freeze', save);
+document.addEventListener('resume', syncPresence);
 updateUI();
 // Pixi's lazy renderer chunks import shared exports from the built entry.
 // Let that entry finish evaluating before waiting for renderer initialization.
 async function start() {
 try { view = await new Renderer(game, $('canvas-host'), onAction).init(); updateUI(); }
 catch (error) { console.error(error); $('canvas-host').innerHTML = '<div class="graphics-error"><h2>画面初始化未完成</h2><p>请使用支持 WebGL 的浏览器，并开启硬件加速后刷新。</p></div>'; }
-if (view) syncBackground();
+if (view) {
+  loop = new FrameLoop(dt => onAction('frame', dt), data.idleRuntime, seconds => {
+    game.log('runtime_interrupted', { seconds: Math.round(seconds), replayed: false });
+  });
+  loop.start(); syncPresence();
+}
 window.corebound = { get game() { return game; }, get renderer() { return view; }, data, save, getState: () => {
-  const p=background?.checkpoint.profile||game.profile,g=background?.checkpoint.run||game,b=g.blocks?.find(block=>block.type==='boss');
-  return { state:g.state, auto:!!g.auto, paused:background?!!g.paused:manualPause(), pendingChapterSelection:!!p.pendingChapterSelection, chapter:p.chapter, unlockedChapter:p.unlockedChapter, frontierChapter:p.frontierChapter, isFrontier:p.chapter===p.frontierChapter, coins:p.coins, shots:g.shots, combo:g.combo, run:{...g.run}, buffs:{...g.buffs}, boss:b?{name:data.chapters[p.chapter].boss.name,phase:b.phase,hp:b.hp,maxHP:b.maxHP,size:b.size,rotation:b.rotation}:null, position:{...g.position}, background:!!background, backgroundRuntime:background?.checkpoint.runtime||null };
+  const p=game.profile,g=game,b=g.blocks?.find(block=>block.type==='boss');
+  return { state:g.state, auto:!!g.auto, paused:manualPause(), pendingChapterSelection:!!p.pendingChapterSelection, chapter:p.chapter, unlockedChapter:p.unlockedChapter, frontierChapter:p.frontierChapter, isFrontier:p.chapter===p.frontierChapter, coins:p.coins, shots:g.shots, combo:g.combo, run:{...g.run}, buffs:{...g.buffs}, boss:b?{name:data.chapters[p.chapter].boss.name,phase:b.phase,hp:b.hp,maxHP:b.maxHP,size:b.size,rotation:b.rotation}:null, position:{...g.position}, background:isBackgroundPage(), execution:'continuous', backgroundRuntime:null };
 } };
 const modelContext = document.modelContext;
 if (modelContext?.registerTool) {
   const register = tool => { try { Promise.resolve(modelContext.registerTool(tool)).catch(error => console.warn('WebMCP registration', error)); } catch (error) { console.warn('WebMCP registration', error); } };
   register({ name: 'read_game_state', description: '读取核芯弹射的当前可见游戏状态、主线与资源。', inputSchema: { type: 'object', properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true }, execute: () => { const state=window.corebound.getState(); return { ...state, goalComplete:state.run.bossVersion===1 ? !state.pendingChapterSelection&&state.isFrontier&&state.run.bossDefeated : game.goalComplete, practice:!!practiceBackup, stats:game.stats }; } });
-  register({ name: 'launch_ball', description: '按指定角度与力度发射弹球；消耗本局一次弹射。', inputSchema: { type: 'object', properties: { angle: { type: 'number' }, power: { type: 'number', minimum: 0.3, maximum: 1 } }, required: ['angle', 'power'], additionalProperties: false }, annotations: { readOnlyHint: false }, execute: input => { if (!input || !Number.isFinite(input.angle) || !Number.isFinite(input.power) || input.power < 0.3 || input.power > 1) throw new Error('角度须为弧度，力度须在 0.3 至 1 之间'); const launched = !background && !document.hidden && game.launch(input.angle, input.power); updateUI(); save(); return { launched, ...window.corebound.getState() }; } });
+  register({ name: 'launch_ball', description: '按指定角度与力度发射弹球；消耗本局一次弹射。', inputSchema: { type: 'object', properties: { angle: { type: 'number' }, power: { type: 'number', minimum: 0.3, maximum: 1 } }, required: ['angle', 'power'], additionalProperties: false }, annotations: { readOnlyHint: false }, execute: input => { if (!input || !Number.isFinite(input.angle) || !Number.isFinite(input.power) || input.power < 0.3 || input.power > 1) throw new Error('角度须为弧度，力度须在 0.3 至 1 之间'); const launched = !modal && !document.hidden && game.launch(input.angle, input.power); updateUI(); save(); return { launched, ...window.corebound.getState() }; } });
   register({ name: 'start_mechanic_preview', description: '进入独立的章节机制试玩。保留正式进度，暂停正式开采。', inputSchema: { type: 'object', properties: { chapter: { type: 'integer', minimum: 0, maximum: data.chapters.length-1 } }, required: ['chapter'], additionalProperties: false }, annotations: { readOnlyHint: false }, execute: input => { if (!Number.isInteger(input?.chapter) || input.chapter < 0 || input.chapter >= data.chapters.length) throw new Error(`章节须为 0 到 ${data.chapters.length-1}`); return { started: startPractice(input.chapter), ...window.corebound.getState() }; } });
   register({ name: 'leave_mechanic_preview', description: '结束机制试玩，恢复正式开采进度。', inputSchema: { type: 'object', properties: {}, additionalProperties: false }, annotations: { readOnlyHint: false }, execute: () => ({ restored: leavePractice(), ...window.corebound.getState() }) });
   register({ name: 'start_treasure_preview', description: '进入独立宝库试玩，选择一种真实稀有强化；保留正式进度。', inputSchema: { type: 'object', properties: { effect: { type: 'string', enum: ['overdrive','arc','rift'] } }, required: ['effect'], additionalProperties: false }, annotations: { readOnlyHint: false }, execute: input => { if (!data.drops.some(d=>d.elite && d.id===input?.effect)) throw new Error('请选择一种高级宝库强化'); practiceDrop=input.effect; return { started: startPractice(data.previews.treasure.chapter,'treasure'), ...window.corebound.getState() }; } });

@@ -1,8 +1,7 @@
 {
   "version": 1,
   "idleRuntime": {
-    "intervalMs": 250,
-    "publishMs": 1000,
+    "frameMs": 16.666666666666668,
     "maxTickSeconds": 2
   },
   "physics": {

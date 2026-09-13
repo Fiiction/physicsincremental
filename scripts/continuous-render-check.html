@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>连续运行检查 · 待开始</title>
+<style>
+  body { margin: 16px; font: 14px/1.5 system-ui, sans-serif; color: #28344c; background: #fff; }
+  h1 { font-size: 20px; margin: 0 0 8px; }
+  button, label { margin-right: 14px; }
+  button { padding: 7px 16px; }
+  main { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 14px; align-items: flex-start; }
+  #canvas-host { position: relative; width: min(72vh, 100vw - 32px); aspect-ratio: 1; }
+  canvas { position: absolute; left: 0; top: 0; display: block; touch-action: none; }
+  pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; max-width: 650px; font-size: 12px; }
+</style>
+<h1>连续运行检查</h1>
+<p>独立内存进度。开始后可真实切换标签或窗口；画面、事件与声音共用一个运行循环。暂停只暂停游戏，监测继续。停止会关闭音频。</p>
+<p><button id="start" disabled>开始</button><button id="pause" disabled>暂停游戏</button><button id="stop" disabled>停止检查</button><label><input id="music" type="checkbox" disabled>背景音乐</label><strong id="status" role="status">准备画面……</strong></p>
+<main><div id="canvas-host"></div><pre id="report"></pre></main>
+<script type="module">
+  import data from '/src/data/balance.json';
+  import { Game, createProfile } from '/src/game.js';
+  import { Renderer } from '/src/renderer.js';
+  import { FrameLoop } from '/src/frame-loop.js';
+
+  const $ = id => document.getElementById(id);
+  const profile = createProfile();
+  profile.upgrades = { power: 2, kinetic: 2, idle: 1 };
+  const game = new Game(data, profile, 777); game.auto = true;
+  const runs = new Set([game.run]), musicSources = new WeakSet();
+  const report = { kind: 'real-game-render-audio', persistentStorageUsed: false, seed: 777, phase: 'preparing', draws: 0, hiddenDraws: 0, unfocusedDraws: 0, eventCount: 0, musicSourceStarts: 0, interruptions: [], presence: [], checkpoints: [], errors: [] };
+  let view, loop, startedAt, stoppedAt, lastReport = 0, lastCheckpoint = 0, monitor;
+  const elapsed = () => startedAt === undefined ? 0 : ((stoppedAt ?? performance.now()) - startedAt) / 1000;
+  const rounded = value => +value.toFixed(3);
+  function writeReport(checkpoint = false) {
+    const source = view?.audio.loop?.source;
+    if (source && !musicSources.has(source)) { musicSources.add(source); report.musicSourceStarts++; }
+    Object.assign(report, {
+      wallSeconds: rounded(elapsed()),
+      gameSeconds: rounded([...runs].reduce((total, run) => total + run.time, 0)),
+      coins: profile.coins, completedRuns: profile.runs, runsStarted: runs.size,
+      currentRunSeconds: rounded(game.run.time), state: game.state, paused: game.paused,
+      shots: game.shots, combo: game.combo, hidden: document.hidden, focused: document.hasFocus(),
+      audio: view?.audio.status() ?? null
+    });
+    if (checkpoint) report.checkpoints.push({ wallSeconds: report.wallSeconds, gameSeconds: report.gameSeconds, coins: report.coins, completedRuns: report.completedRuns, draws: report.draws, hiddenDraws: report.hiddenDraws, unfocusedDraws: report.unfocusedDraws, eventCount: report.eventCount, musicSourceStarts: report.musicSourceStarts, hidden: report.hidden, focused: report.focused });
+    $('report').textContent = JSON.stringify(report, null, 2);
+    document.title = `${Math.floor(report.wallSeconds)}s · ✦ ${Math.floor(profile.coins)} · ${report.draws} 帧`;
+    lastReport = performance.now();
+  }
+  function presence(event) {
+    report.presence.push({ event: event.type, wallSeconds: rounded(elapsed()), hidden: document.hidden, focused: document.hasFocus() });
+    writeReport();
+  }
+  document.addEventListener('visibilitychange', presence);
+  window.addEventListener('focus', presence); window.addEventListener('blur', presence);
+  window.addEventListener('error', event => { report.errors.push(event.message); writeReport(); });
+  window.addEventListener('unhandledrejection', event => { report.errors.push(String(event.reason)); writeReport(); });
+  function stop() {
+    if (startedAt !== undefined && stoppedAt === undefined) stoppedAt = performance.now();
+    loop?.stop(); view?.audio.destroy(); clearInterval(monitor);
+    report.phase = 'stopped'; $('status').textContent = '已停止';
+    for (const id of ['start', 'pause', 'stop', 'music']) $(id).disabled = true;
+    writeReport(true);
+  }
+  $('start').addEventListener('click', () => {
+    if (startedAt !== undefined) return;
+    view.unlockAudio(); startedAt = performance.now(); lastCheckpoint = startedAt;
+    report.phase = 'running'; $('status').textContent = '运行中'; $('start').disabled = true;
+    $('pause').disabled = $('stop').disabled = false;
+    loop.start();
+    // Test the browser's stopped-rAF path without faking visibility or changing production code.
+    if (new URLSearchParams(location.search).has('timer')) cancelAnimationFrame(loop.animation);
+    report.scheduler = new URLSearchParams(location.search).has('timer') ? 'timer-only (rAF cancelled for test)' : 'normal';
+    writeReport(true);
+    monitor = setInterval(() => {
+      if (performance.now() - lastReport >= 900) writeReport();
+    }, 1000);
+  });
+  $('pause').addEventListener('click', () => {
+    game.paused = !game.paused; view.unlockAudio();
+    report.phase = game.paused ? 'paused' : 'running';
+    $('pause').textContent = game.paused ? '继续游戏' : '暂停游戏';
+    $('status').textContent = game.paused ? '游戏暂停 · 监测与绘制继续' : '运行中'; writeReport();
+  });
+  $('music').addEventListener('change', () => {
+    profile.settings.music = $('music').checked; view.unlockAudio(); writeReport();
+  });
+  $('stop').addEventListener('click', stop);
+  window.addEventListener('pagehide', stop);
+
+  async function prepare() {
+    try {
+      view = await new Renderer(game, $('canvas-host'), () => {}).init();
+      view.app.canvas.addEventListener('webglcontextlost', () => { report.errors.push('WebGL context lost'); writeReport(); });
+      view.render(0); view.app.render();
+      loop = new FrameLoop(dt => {
+        // Keep references to every run so final clock increments survive an automatic restart.
+        runs.add(game.run); game.tick(dt); runs.add(game.run);
+        const events = game.events.splice(0); report.eventCount += events.length;
+        view.events(events); view.render(dt); view.app.render();
+        report.draws++; if (document.hidden) report.hiddenDraws++; if (!document.hasFocus()) report.unfocusedDraws++;
+        const now = performance.now(), checkpoint = now - lastCheckpoint >= 5000;
+        if (checkpoint) lastCheckpoint = now;
+        if (checkpoint || now - lastReport >= 1000) writeReport(checkpoint);
+      }, data.idleRuntime, seconds => report.interruptions.push({ wallSeconds: rounded(elapsed()), skippedSeconds: rounded(seconds), replayed: false }));
+      report.phase = 'ready'; $('status').textContent = '已准备 · 点击开始';
+      $('start').disabled = $('music').disabled = false; writeReport();
+    } catch (error) {
+      report.phase = 'error'; report.errors.push(error.stack || String(error));
+      $('status').textContent = '初始化失败'; writeReport();
+    }
+  }
+  void prepare();
+</script>
+</html>

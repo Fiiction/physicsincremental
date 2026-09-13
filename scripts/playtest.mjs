@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { Game, createProfile, upgradeStatus, upgradeCost, sanitizeProfile } from '../src/game.js';
 import { advanceElapsed } from '../src/idle.js';
-import { Worker } from 'node:worker_threads';
 
 const data = JSON.parse(fs.readFileSync(new URL('../src/data/balance.json', import.meta.url), 'utf8'));
 const PLAN = [['power',1],['kinetic',1],['idle',1]];
@@ -338,32 +337,22 @@ assert(relicRun.run.relicTriggers.heart>0,'Real rebounds did not cut a tether');
 assert(Math.hypot(relicRun.position.x-relicRun.launchOrigin.x,relicRun.position.y-relicRun.launchOrigin.y)<.01,'Return did not finish at its launch point');
 assert(!relicRun.blocks.some(b=>b.alive && Math.abs(b.x+16-relicRun.position.x)<15 && Math.abs(b.y+16-relicRun.position.y)<15),'Return finished inside a surviving block');
 
-// Exercise continuous live worker physics and a final handoff; old timestamps are ignored.
+// A normal autosave resumes the same real flight and automatic runs. Foreground /
+// background ownership no longer exists; page scheduling is covered by idle-session-check.
 const backgroundProfile=createProfile(); backgroundProfile.upgrades={power:2,kinetic:2,idle:1};
 const baseline=new Game(data,backgroundProfile,886); baseline.auto=true; baseline.launch(baseline.autoAngle(),1,true);
-const state=baseline.snapshot(), workerURL=new URL('../src/idle-worker.js',import.meta.url).href;
-const worker=new Worker(`const {parentPort}=require('node:worker_threads'); global.self={}; global.postMessage=m=>parentPort.postMessage(m); parentPort.on('message',data=>self.onmessage({data})); import(${JSON.stringify(workerURL)}).then(()=>parentPort.postMessage({ready:true}));`,{eval:true});
-const started=Date.now()-70000;
-let finalPacket, finishTimer;
-try { finalPacket=await new Promise((resolve,reject)=>{
-  const timeout=setTimeout(()=>reject(new Error('Background handoff timed out')),10000);
-  worker.on('error',reject);
-  worker.on('message',packet=>{
-    if(packet.ready) {
-      worker.postMessage({type:'start',epoch:1,balance:data,profile:structuredClone(backgroundProfile),run:state,through:started});
-      finishTimer=setTimeout(()=>worker.postMessage({type:'finish'}),550);
-    }
-    else if(packet.finished) { clearTimeout(timeout); resolve(packet); }
-  });
-}); } finally { clearTimeout(finishTimer); await worker.terminate(); }
-assert(finalPacket.runtime.simulatedSeconds>=.4&&finalPacket.runtime.simulatedSeconds<2,'Worker replayed old time or did not run');
-assert.equal(finalPacket.runtime.interruptedSeconds,0,'Normal live worker ticks were discarded');
-advanceElapsed(baseline,finalPacket.runtime.simulatedSeconds);
-assert.equal(finalPacket.profile.coins,baseline.profile.coins,'Background rewards diverged');
-assert.equal(finalPacket.profile.totalKills,baseline.profile.totalKills,'Background destruction diverged');
-assert.equal(finalPacket.run.seed,baseline.seed,'Background random sequence diverged');
-assert.equal(finalPacket.run.run.shots,baseline.run.shots,'Background launched twice during handoff');
-assert(finalPacket.run.shotTime>0,'Background ball physics made no live progress');
+for(let i=0;i<30;i++)baseline.tick(1/60);
+assert(baseline.state==='flying'&&baseline.shotTime>0,'Persistence fixture has no live flight');
+const liveSave=JSON.parse(JSON.stringify({profile:baseline.profile,run:baseline.snapshot()}));
+const continued=new Game(data,liveSave.profile); assert(continued.restore(liveSave.run));
+for(let i=0;i<3600;i++) {
+  // A few delayed frames use the same elapsed clock; they are not extra launches.
+  const dt=i%30===0?.05:1/60;
+  baseline.tick(dt); continued.tick(dt); baseline.events.length=continued.events.length=0;
+}
+assert.deepEqual(continued.snapshot(),baseline.snapshot(),'Continuous flight or Auto restart changed after autosave');
+assert.deepEqual(continued.profile,baseline.profile,'Real drops or income changed after autosave');
+assert(continued.profile.earned>0&&continued.profile.runs>0,'Live continuation produced no income or automatic restart');
 const legacyFarmer=createProfile(); legacyFarmer.chapter=4; legacyFarmer.relics=data.relics.map(r=>r.id);
 legacyFarmer.upgrades=Object.fromEntries(data.upgrades.filter(u=>u.viewGroup!=='finale').map(u=>[u.id,Math.min(u.max,3)]));
 Object.assign(legacyFarmer.upgrades,{power:32,kinetic:12,battery:4,salvage:12,fortune:12,combo:8,goldCombo:4,split:4,reactor:4,magnet:4,prism:4,elitePower:4,comboMint:4,idleYield:4});
@@ -456,7 +445,7 @@ const report = {
     stopMotion: { maximumFinalSpeed:+maxStopSpeed.toFixed(3),maximumFinalTravel:+maxStopTravel.toFixed(4) },
     highSpeedMotion: 'nine solid-wall approaches + bounded position + single clock and energy drain + straight flight + save continuation pass',
     constellationContinuity: 'windup and volley resume + distinct targets + reacquisition + no false hit or recursive charge + clipped geometry + split return + deadline + laser cooldown pass',
-    saveResume: 'pass', pause: 'pass', idleContinuation: 'pass', breakthroughGate: 'real clear spawns boss; only its real defeat qualifies; old cumulative progress cannot skip it', relicContinuity: 'return + tether + springs + fusion pass', backgroundWorker: 'continuous live physics + final handoff; stale timestamp ignored', lateGameStress: '10 / 10 pass'
+    saveResume: 'pass', pause: 'pass', idleContinuation: 'pass', breakthroughGate: 'real clear spawns boss; only its real defeat qualifies; old cumulative progress cannot skip it', relicContinuity: 'return + tether + springs + fusion pass', continuousPlayPersistence: 'live flight, drops, income and automatic restarts survive autosave; page scheduling checked by idle-session-check', lateGameStress: '10 / 10 pass'
   },
   note: 'Simulated combat time excludes player aiming, reading, shopping and relic decisions. Boss hitSources count real damage events on the boss; shotTechTriggers describe the whole shot, not guaranteed boss hits. Remaining shots at summon exclude the already flying shot. Boss challenge length counts runs from first encounter through first victory, including a new run that fails to summon. Automated checks do not establish subjective fun or browser frame rate.',
   results, stress, phases, farmComparisons, endgameFollowup, retainedLateBuild

@@ -29,7 +29,7 @@ export class Renderer {
   async init() {
     this.app = new Application();
     const { width, height } = this.host.getBoundingClientRect();
-    await this.app.init({ width: Math.max(1, width), height: Math.max(1, height), antialias: true, backgroundAlpha: 0, resolution: window.devicePixelRatio || 1, autoDensity: true, preference: 'webgl', powerPreference: 'high-performance' });
+    await this.app.init({ width: Math.max(1, width), height: Math.max(1, height), antialias: true, backgroundAlpha: 0, resolution: window.devicePixelRatio || 1, autoDensity: true, preference: 'webgl', powerPreference: 'high-performance', autoStart: false });
     this.host.append(this.app.canvas);
     this.app.canvas.setAttribute('aria-label', '弹球矿场。拖拽圆球向反方向发射，或使用方向键瞄准、空格发射。');
     this.app.canvas.setAttribute('tabindex', '0');
@@ -52,11 +52,6 @@ export class Renderer {
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(this.host);
     this.input(); this.rebuild();
-    this.app.ticker.add(ticker => {
-      // Moving between monitors can change pixel density without changing the CSS size.
-      if (this.app.renderer.resolution !== (window.devicePixelRatio || 1)) this.resize();
-      this.onAction('frame', Math.min(0.05, ticker.deltaMS / 1000));
-    });
     return this;
   }
   resize() {
@@ -282,7 +277,7 @@ export class Renderer {
     }
   }
   events(events) {
-    this.audio.update(this.game, { hidden: document.hidden, paused: this.game.paused });
+    this.audio.update(this.game, { hidden: document.hidden, paused: this.game.paused || this.menuOpen });
     this.audio.events(events, this.game);
     for (const e of events) {
       if (e.type === 'newrun') this.rebuild();
@@ -497,7 +492,7 @@ export class Renderer {
     this.floaters.push({ node, life, max: life, id: d.id, caption, count: 1, scale, elite: !!d.elite });
   }
   unlockAudio() {
-    this.audio.update(this.game, { hidden: document.hidden, paused: this.game.paused });
+    this.audio.update(this.game, { hidden: document.hidden, paused: this.game.paused || this.menuOpen });
     this.audio.unlock();
   }
   point(event) { const box = this.app.canvas.getBoundingClientRect(); return { x: (event.clientX - box.left) / box.width * 608, y: (event.clientY - box.top) / box.height * 608 }; }
@@ -529,7 +524,9 @@ export class Renderer {
     canvas.addEventListener('lostpointercapture', () => { this.drag = null; });
   }
   render(dt) {
-    this.audio.update(this.game, { hidden: document.hidden, paused: this.game.paused });
+    // Both animation frames and background pulses draw this same scene at native resolution.
+    if (this.app.renderer.resolution !== (window.devicePixelRatio || 1)) this.resize();
+    this.audio.update(this.game, { paused: this.game.paused || this.menuOpen });
     this.time += dt;
     const game = this.game, g = this.over.clear(), under = this.under.clear();
     const bossDt = game.paused ? 0 : dt; this.bossTime += bossDt;

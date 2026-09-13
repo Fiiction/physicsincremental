@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { Game, createProfile, sanitizeProfile } from '../src/game.js';
 import { advanceElapsed } from '../src/idle.js';
-import { Worker } from 'node:worker_threads';
 
 const data=JSON.parse(fs.readFileSync(new URL('../src/data/balance.json',import.meta.url),'utf8'));
 function chamber(chapter=0,upgrades={power:4,kinetic:8}) {
@@ -50,35 +49,19 @@ migrated.auto=true;advanceElapsed(migrated,60);
 assert.equal(migrated.profile.coins,wallet);assert(migrated.pendingChapterSelection);
 assert(migrated.selectChapter(migrated.profile.frontierChapter));assert(migrated.run.bossVersion>=1);
 
-// Run real boss physics continuously in the browser worker; old timestamps must not replay.
-const background=chamber(0,{power:7,kinetic:10,idle:1});background.auto=true;background.launch(0,1);
-const workerURL=new URL('../src/idle-worker.js',import.meta.url).href;
-const worker=new Worker(`const {parentPort}=require('node:worker_threads');global.self={};global.postMessage=m=>parentPort.postMessage(m);parentPort.on('message',data=>self.onmessage({data}));import(${JSON.stringify(workerURL)}).then(()=>parentPort.postMessage({ready:true}));`,{eval:true});
-const started=Date.now()-8000;
-let packet, finishTimer;
-try {
-  packet=await new Promise((resolve,reject)=>{
-    const timeout=setTimeout(()=>reject(new Error('Boss background handoff timed out')),10000);
-    worker.on('error',error=>{clearTimeout(timeout);reject(error);});
-    worker.on('message',message=>{
-      if(message.ready) {
-        worker.postMessage({type:'start',epoch:1,balance:data,profile:structuredClone(background.profile),run:background.snapshot(),through:started});
-        finishTimer=setTimeout(()=>worker.postMessage({type:'finish'}),550);
-      }
-      else if(message.finished){clearTimeout(timeout);resolve(message);}
-    });
-  });
-} finally { clearTimeout(finishTimer); await worker.terminate(); }
-assert(packet.runtime.simulatedSeconds>=.4&&packet.runtime.simulatedSeconds<2,'Worker replayed the old boss timestamp or did not run');
-assert.equal(packet.runtime.interruptedSeconds,0,'Ordinary boss worker ticks were discarded');
-advanceElapsed(background,packet.runtime.simulatedSeconds);
-const backgroundBoss=packet.run.blocks.find(b=>b.type==='boss');
-assert(background.run.bossDamage>0,'Background boss simulation never dealt real damage');
-assert.equal(backgroundBoss.hp,background.boss.hp,'Background boss damage diverged');
-assert.equal(backgroundBoss.rotation,background.boss.rotation,'Background boss rotation diverged');
-assert.equal(packet.run.run.bossShots,background.run.bossShots,'Boss handoff duplicated a shot');
-assert.equal(packet.profile.coins,background.profile.coins,'Boss handoff duplicated a reward');
+// The same live Game now handles every frame. Autosave during an automatic boss
+// shot must preserve health, rotation, future shots and rewards across a reload.
+const continuous=chamber(0,{power:7,kinetic:10,idle:1});continuous.auto=true;continuous.launch(0,1);
+for(let i=0;i<30;i++)continuous.tick(1/60);
+assert(continuous.run.bossDamage>0,'Continuous boss simulation never dealt real damage');
+const continued=new Game(data,structuredClone(continuous.profile));assert(continued.restore(continuous.snapshot()));
+for(let i=0;i<900;i++) {
+  const dt=i%30===0?.05:1/60;
+  continuous.tick(dt);continued.tick(dt);continuous.events.length=continued.events.length=0;
+}
+assert.deepEqual(continued.snapshot(),continuous.snapshot(),'Automatic boss fight changed after autosave');
+assert.deepEqual(continued.profile,continuous.profile,'Automatic boss fight duplicated or lost rewards after autosave');
 
-const report={generatedAt:new Date().toISOString(),fixedHealth:'pass',realBossCollision:'pass',activeSaveResume:'pass',failureResetsBoss:'pass',noExtraShots:'pass',highSpeedLargeBlock:'pass',legacyRewardAndPendingChoice:'pass',activeBossBackgroundWorker:'pass',workerLiveSeconds:packet.runtime.simulatedSeconds,oldWorkerTimestampIgnored:'pass',note:'Real boss collisions, save continuity and continuous live worker handoff; no frozen-time replay or player-facing trial mode.'};
-fs.writeFileSync(new URL('../reports/boss-check.json',import.meta.url),JSON.stringify(report,null,2));
+const report={generatedAt:new Date().toISOString(),fixedHealth:'pass',realBossCollision:'pass',activeSaveResume:'pass',failureResetsBoss:'pass',noExtraShots:'pass',highSpeedLargeBlock:'pass',legacyRewardAndPendingChoice:'pass',continuousAutomaticBossSaveResume:'pass',note:'Real boss collisions and automatic boss fight persistence. Page visibility, scheduling and no frozen-time replay are tested separately in idle-session-check.'};
+if(!process.argv.includes('--no-report'))fs.writeFileSync(new URL('../reports/boss-check.json',import.meta.url),JSON.stringify(report,null,2));
 console.log(JSON.stringify(report,null,2));
