@@ -378,7 +378,7 @@ body{margin:0}
 .playfield,.arena-column{display:contents}
 .arena-shell{position:absolute;left:50%;top:calc(50% + 22px);transform:translate(-50%,-50%);width:var(--arena);height:var(--arena);aspect-ratio:1;background:#fff;isolation:isolate}
 #canvas-host{width:100%;height:100%;touch-action:none}
-#canvas-host canvas{width:100%;height:100%;display:block;touch-action:none}
+#canvas-host canvas{position:absolute;left:0;top:0;display:block;touch-action:none}
 .game-header,.match-hud,.arena-bottom{position:absolute;z-index:2;pointer-events:none}
 .game-header button,.match-hud button,.arena-bottom button{pointer-events:auto}
 .game-header{top:0;left:50%;transform:translateX(-50%);width:min(100%,calc(var(--arena) + 120px));height:56px;padding:6px 12px;display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:12px}

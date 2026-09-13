@@ -28,13 +28,9 @@ export class Renderer {
   }
   async init() {
     this.app = new Application();
-    await this.app.init({ width: 608, height: 608, antialias: true, backgroundAlpha: 0, resolution: Math.min(window.devicePixelRatio || 1, 2), autoDensity: true, preference: 'webgl', powerPreference: 'high-performance' });
-    this.app.canvas.style.width = this.app.canvas.style.height = '100%';
+    const { width, height } = this.host.getBoundingClientRect();
+    await this.app.init({ width: Math.max(1, width), height: Math.max(1, height), antialias: true, backgroundAlpha: 0, resolution: window.devicePixelRatio || 1, autoDensity: true, preference: 'webgl', powerPreference: 'high-performance' });
     this.host.append(this.app.canvas);
-    BitmapFont.install({ name: 'ComboDigits', style: { fontFamily: 'Arial', fontSize: 40, fontWeight: '800', fill: '#28344c', stroke: { color: '#ffffff', width: 5 } }, chars: '0123456789×', resolution: 2, padding: 4 });
-    this.hudScale = 1;
-    this.resizeObserver = new ResizeObserver(([entry]) => { this.hudScale = Math.max(1, 608 / Math.max(200,entry.contentRect.width)); });
-    this.resizeObserver.observe(this.host);
     this.app.canvas.setAttribute('aria-label', '弹球矿场。拖拽圆球向反方向发射，或使用方向键瞄准、空格发射。');
     this.app.canvas.setAttribute('tabindex', '0');
     this.world = new Container(); this.app.stage.addChild(this.world);
@@ -50,9 +46,46 @@ export class Renderer {
     }
     this.over = new Graphics(); this.world.addChild(this.over);
     this.textLayer = new Container(); this.app.stage.addChild(this.textLayer);
+    this.resize();
+    this.resizeObserver = new ResizeObserver(() => this.resize());
+    this.resizeObserver.observe(this.host);
     this.input(); this.rebuild();
-    this.app.ticker.add(ticker => this.onAction('frame', Math.min(0.05, ticker.deltaMS / 1000)));
+    this.app.ticker.add(ticker => {
+      // Moving between monitors can change pixel density without changing the CSS size.
+      if (this.app.renderer.resolution !== (window.devicePixelRatio || 1)) this.resize();
+      this.onAction('frame', Math.min(0.05, ticker.deltaMS / 1000));
+    });
     return this;
+  }
+  resize() {
+    const { width, height } = this.host.getBoundingClientRect();
+    if (width <= 0 || height <= 0) return;
+    const resolution = window.devicePixelRatio || 1;
+    // Resize the GPU drawing surface; only the scene coordinates stay at 608 units.
+    // Pixi also needs a density transition when old and new physical sizes happen to match.
+    if (this.app.renderer.resolution !== resolution) this.app.renderer.resolution = resolution;
+    this.app.renderer.resize(width, height, resolution);
+    this.app.stage.scale.set(width / 608, height / 608);
+    this.sceneScale = width / 608;
+    this.hudScale = Math.max(1, 608 / Math.max(200, width));
+    const textResolution = Math.ceil(resolution * Math.max(1, width / 608, height / 608));
+    if (this.textResolution !== textResolution) {
+      this.textResolution = textResolution;
+      const nodes = [...this.app.stage.children];
+      while (nodes.length) {
+        const node = nodes.pop();
+        if (node instanceof Text) node.resolution = textResolution;
+        if (node.children) nodes.push(...node.children);
+      }
+    }
+    // Keep the shared digit atlas sharp too, without rebuilding it for every resize pixel.
+    const fontResolution = Math.max(2, textResolution);
+    if (!this.comboFontResolution || fontResolution > this.comboFontResolution) {
+      if (this.comboFontResolution) BitmapFont.uninstall('ComboDigits');
+      BitmapFont.install({ name: 'ComboDigits', style: { fontFamily: 'Arial', fontSize: 40, fontWeight: '800', fill: '#28344c', stroke: { color: '#ffffff', width: 5 } }, chars: '0123456789×', resolution: fontResolution, padding: 4 });
+      this.comboFontResolution = fontResolution;
+      for (const f of this.comboTexts) f.node.onViewUpdate();
+    }
   }
   color(b) {
     const palette = this.game.chapter.palette;
@@ -90,7 +123,7 @@ export class Renderer {
     const side = this.game.data.physics.size / this.game.data.physics.grid * this.game.data.physics.blockSize;
     const square = new Sprite(Texture.WHITE); square.anchor.set(0.5); square.width = square.height = side; square.tint = this.color(b); container.addChild(square);
     const hole = new Sprite(Texture.WHITE); hole.anchor.set(0.5); hole.tint = 0xffffff; container.addChild(hole);
-    const label = new Text({ text: this.label(b), style: { fontFamily: 'Consolas, monospace', fontSize: 16, fontWeight: '600', trim: true, fill: b.type === 'elite' ? 0xffdf89 : b.type === 'gold' ? 0x775120 : 0xffffff } });
+    const label = new Text({ text: this.label(b), resolution: this.textResolution, style: { fontFamily: 'Consolas, monospace', fontSize: 16, fontWeight: '600', trim: true, fill: b.type === 'elite' ? 0xffdf89 : b.type === 'gold' ? 0x775120 : 0xffffff } });
     label.anchor.set(0.5); container.addChild(label);
     this.blockLayer.addChild(container);
     const view = { container, square, hole, label, punch: 0, block: b };
@@ -344,7 +377,7 @@ export class Renderer {
   }
   float(x, y, text, color, size, life = 0.7) {
     if (this.floaters.length >= 35) return;
-    const node = new Text({ text, style: { fontFamily: 'Inter, Microsoft YaHei, sans-serif', fontSize: size, fontWeight: '600', fill: color, stroke: { color: 0xffffff, width: 3 } } });
+    const node = new Text({ text, resolution: this.textResolution, style: { fontFamily: 'Inter, Microsoft YaHei, sans-serif', fontSize: size, fontWeight: '600', fill: color, stroke: { color: 0xffffff, width: 3 } } });
     node.anchor.set(0.5); node.position.set(Math.max(70, Math.min(538, x)), y); this.textLayer.addChild(node);
     const floater={ node, life, max: life };this.floaters.push(floater);return floater;
   }
@@ -407,7 +440,7 @@ export class Renderer {
         this[field] = target + (fade.strength - target) * (1 - fade.elapsed / fade.duration) ** 2;
       }
     }
-    const radius = this.dispersionStrength * config.shiftPerStrength;
+    const radius = this.dispersionStrength * config.shiftPerStrength * (this.sceneScale || 1);
     this.comboFilter.enabled = this.effectStrength > 0 || this.dispersionStrength > 0;
     this.comboFilter.padding = Math.ceil(radius) + 2;
     this.comboFilter.resources.spectrum.uniforms.uShift = radius;
@@ -435,8 +468,8 @@ export class Renderer {
     const node = new Container(), bg = new Graphics();
     bg.circle(0,0,28).fill({ color: 0xffffff, alpha: this.game.data.effects.dropBackgroundAlpha }).stroke({ color: d.color, width: 1.4, alpha:0.55 }); node.addChild(bg);
     if(d.elite) bg.poly([0,-37,37,0,0,37,-37,0]).stroke({color:0xc8a257,width:2,alpha:.9}).circle(0,0,32).stroke({color:d.color,width:1,alpha:.5});
-    const icon = new Text({ text: d.icon, style: { fontFamily: 'Arial', fontSize: d.elite ? this.game.data.effects.eliteDropSize : this.game.data.effects.dropSize, trim: true, fill: d.color } }); icon.anchor.set(0.5); node.addChild(icon);
-    const caption = new Text({ text: d.name, style: { fontFamily: 'Arial, Microsoft YaHei', fontSize: 12, fill: 0x29314d, stroke: { color: 0xffffff, width: 2 } } }); caption.anchor.set(0.5); caption.y = 39; node.addChild(caption);
+    const icon = new Text({ text: d.icon, resolution: this.textResolution, style: { fontFamily: 'Arial', fontSize: d.elite ? this.game.data.effects.eliteDropSize : this.game.data.effects.dropSize, trim: true, fill: d.color } }); icon.anchor.set(0.5); node.addChild(icon);
+    const caption = new Text({ text: d.name, resolution: this.textResolution, style: { fontFamily: 'Arial, Microsoft YaHei', fontSize: 12, fill: 0x29314d, stroke: { color: 0xffffff, width: 2 } } }); caption.anchor.set(0.5); caption.y = 39; node.addChild(caption);
     const scale = Math.min(1.6,this.hudScale);
     node.position.set(Math.max(43*scale,Math.min(608-43*scale,e.x)), Math.max(40*scale,Math.min(608-60*scale,e.y - 20))); this.textLayer.addChild(node);
     if (d.elite) caption.text = `${d.name} · 下一发`;

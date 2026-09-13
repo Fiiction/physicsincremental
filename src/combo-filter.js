@@ -48,7 +48,7 @@ export function createComboFilter() {
         finalColor = vec4(clamp(rgb, vec3(0.0), vec3(alpha)), alpha);
       }` }),
     resources: { spectrum: { uShift: { value: 0, type: 'f32' }, uHue: { value: 0, type: 'f32' }, uAngle: { value: Math.PI / 4, type: 'f32' } } },
-    padding: 4, resolution: 1, antialias: true
+    padding: 4, resolution: 'inherit', antialias: true
   });
   filter.enabled = false;
   return filter;

@@ -72,4 +72,8 @@ assert(view.effectStrength>0);
 view.game.profile.settings.reducedEffects=true; view.updateComboSpectrum(1/60);
 assert.equal(view.effectStrength,0);
 assert.equal(view.dispersionStrength,0);
+view.game.profile.settings.reducedEffects=false;
+view.game.combo=20; view.sceneScale=2; view.updateComboSpectrum(config.riseDuration);
+near(view.comboFilter.resources.spectrum.uniforms.uShift,1.8);
+near(view.comboFilter.resources.spectrum.uniforms.uHue,18*Math.PI/180);
 console.log('Combo curve: 1,015 continuous increments, fixed dispersion, half hue, smooth increases and finite end fades passed.');
