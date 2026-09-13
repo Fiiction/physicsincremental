@@ -1,0 +1,58 @@
+{
+  "finalRegionReinforcement": "earlier regions and entrance unchanged; new outer HP, saved native percentage basis, legacy map fallback, rare and lucky boxes, every percentage attack, salvo retargeting and direct damage pass",
+  "chapterTravel": "farm, save, return, unlock and reward protection pass; breakthrough waits for a saved explicit destination choice, idle cannot skip it, selection resumes play; old completed saves retain progress and receive region five",
+  "randomMaps": 24,
+  "portalSides": 4,
+  "chestsPerMap": {
+    "base": 12.6,
+    "researched": 35.8
+  },
+  "rareTargets": {
+    "maps": 60,
+    "baseCount": 2,
+    "researchedCount": 5,
+    "nearestRingBefore": 6,
+    "nearestRingAfter": 3,
+    "contents": [
+      "rift",
+      "arc",
+      "overdrive"
+    ]
+  },
+  "rareRewardShots": {
+    "none": {
+      "meanKills": 22.7,
+      "meanHealthBarsRemoved": 34.5,
+      "damageGainPercent": 0,
+      "killGainPercent": 0,
+      "arcs": 0,
+      "pulses": 0
+    },
+    "overdrive": {
+      "meanKills": 44.2,
+      "meanHealthBarsRemoved": 58.4,
+      "damageGainPercent": 69.3,
+      "killGainPercent": 94.9,
+      "arcs": 0,
+      "pulses": 0
+    },
+    "arc": {
+      "meanKills": 26.5,
+      "meanHealthBarsRemoved": 38.5,
+      "damageGainPercent": 11.7,
+      "killGainPercent": 16.9,
+      "arcs": 54,
+      "pulses": 0
+    },
+    "rift": {
+      "meanKills": 34.5,
+      "meanHealthBarsRemoved": 47.9,
+      "damageGainPercent": 38.9,
+      "killGainPercent": 52.2,
+      "arcs": 0,
+      "pulses": 124
+    }
+  },
+  "rareContinuity": "live rift damage and timers resume identically",
+  "drops": "one chest rule, fixed contents, idle guarantee and lucky spawn pass"
+}

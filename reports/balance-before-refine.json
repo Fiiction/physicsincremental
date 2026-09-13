@@ -1,0 +1,339 @@
+{
+  "chapters": [
+    {
+      "name": "初生矿庭",
+      "hp": 1,
+      "reward": 1.5
+    },
+    {
+      "name": "余烬铸造厂",
+      "hp": 50,
+      "reward": 12
+    },
+    {
+      "name": "折跃织井",
+      "hp": 20000,
+      "reward": 144
+    },
+    {
+      "name": "共振棱镜",
+      "hp": 5000000,
+      "reward": 1728
+    },
+    {
+      "name": "终光圣殿",
+      "hp": 500000000,
+      "reward": 20736
+    }
+  ],
+  "ringHP": [
+    1,
+    1,
+    1,
+    2,
+    4,
+    8,
+    16,
+    30,
+    60,
+    120
+  ],
+  "tierHP": [
+    1,
+    1.1,
+    1.22,
+    1.36,
+    1.53,
+    1.73,
+    1.97,
+    2.24,
+    2.55,
+    2.9,
+    3.3,
+    3.75
+  ],
+  "upgrades": [
+    {
+      "id": "power",
+      "cost": 15,
+      "growth": 1.59,
+      "max": 48
+    },
+    {
+      "id": "kinetic",
+      "cost": 18,
+      "growth": 1.74,
+      "max": 24
+    },
+    {
+      "id": "battery",
+      "cost": 60,
+      "growth": 2.04,
+      "max": 4
+    },
+    {
+      "id": "fortune",
+      "cost": 40,
+      "growth": 1.79,
+      "max": 12
+    },
+    {
+      "id": "salvage",
+      "cost": 45,
+      "growth": 1.84,
+      "max": 12
+    },
+    {
+      "id": "combo",
+      "cost": 90,
+      "growth": 2.04,
+      "max": 8
+    },
+    {
+      "id": "sight",
+      "cost": 112,
+      "growth": 180,
+      "max": 2
+    },
+    {
+      "id": "idle",
+      "cost": 60,
+      "growth": 1,
+      "max": 1
+    },
+    {
+      "id": "idleYield",
+      "cost": 98,
+      "growth": 1.84,
+      "max": 4
+    },
+    {
+      "id": "idleSpeed",
+      "cost": 98,
+      "growth": 1.84,
+      "max": 3
+    },
+    {
+      "id": "idleLuck",
+      "cost": 140,
+      "growth": 2.04,
+      "max": 2
+    },
+    {
+      "id": "split",
+      "cost": 150,
+      "growth": 2.04,
+      "max": 4
+    },
+    {
+      "id": "splitCombo",
+      "cost": 196,
+      "growth": 1,
+      "max": 1
+    },
+    {
+      "id": "chain",
+      "cost": 434,
+      "growth": 2.34,
+      "max": 3
+    },
+    {
+      "id": "comboLuck",
+      "cost": 182,
+      "growth": 2.04,
+      "max": 2
+    },
+    {
+      "id": "goldCombo",
+      "cost": 245,
+      "growth": 2.04,
+      "max": 4
+    },
+    {
+      "id": "shock",
+      "cost": 336,
+      "growth": 2.04,
+      "max": 3
+    },
+    {
+      "id": "reactor",
+      "cost": 385,
+      "growth": 2.04,
+      "max": 4
+    },
+    {
+      "id": "magnet",
+      "cost": 525,
+      "growth": 2.24,
+      "max": 4
+    },
+    {
+      "id": "prism",
+      "cost": 1120,
+      "growth": 2.24,
+      "max": 4
+    },
+    {
+      "id": "splitShock",
+      "cost": 2400,
+      "growth": 3.8,
+      "max": 8
+    },
+    {
+      "id": "fracture",
+      "cost": 3200,
+      "growth": 5,
+      "max": 6
+    },
+    {
+      "id": "splitTether",
+      "cost": 5200,
+      "growth": 4,
+      "max": 8
+    },
+    {
+      "id": "returnFormation",
+      "cost": 4800,
+      "growth": 4,
+      "max": 8
+    },
+    {
+      "id": "springHarvest",
+      "cost": 6400,
+      "growth": 4.2,
+      "max": 6
+    },
+    {
+      "id": "constellation",
+      "cost": 9000,
+      "growth": 2.1,
+      "max": 1
+    },
+    {
+      "id": "starCombo",
+      "cost": 11000,
+      "growth": 4.8,
+      "max": 6
+    },
+    {
+      "id": "starSplit",
+      "cost": 12500,
+      "growth": 4.4,
+      "max": 8
+    },
+    {
+      "id": "starBumper",
+      "cost": 15000,
+      "growth": 4.8,
+      "max": 6
+    },
+    {
+      "id": "starReturn",
+      "cost": 18000,
+      "growth": 4.8,
+      "max": 6
+    },
+    {
+      "id": "starPrism",
+      "cost": 36000,
+      "growth": 4.5,
+      "max": 8
+    },
+    {
+      "id": "starSalvo",
+      "cost": 52000,
+      "growth": 4.8,
+      "max": 6
+    },
+    {
+      "id": "comboMint",
+      "cost": 600,
+      "growth": 3.6,
+      "max": 4
+    },
+    {
+      "id": "eliteUnlock",
+      "cost": 560,
+      "growth": 1,
+      "max": 1
+    },
+    {
+      "id": "eliteChance",
+      "cost": 980,
+      "growth": 2.4,
+      "max": 3
+    },
+    {
+      "id": "eliteAccess",
+      "cost": 1350,
+      "growth": 2.5,
+      "max": 3
+    },
+    {
+      "id": "elitePower",
+      "cost": 5200,
+      "growth": 4.8,
+      "max": 8
+    },
+    {
+      "id": "eliteSeeds",
+      "cost": 4800,
+      "growth": 2.5,
+      "max": 2
+    },
+    {
+      "id": "treasureCombo",
+      "cost": 1850,
+      "growth": 2.3,
+      "max": 3
+    },
+    {
+      "id": "comboBurst",
+      "cost": 3200,
+      "growth": 4.6,
+      "max": 6
+    },
+    {
+      "id": "arcSplit",
+      "cost": 14000,
+      "growth": 4.6,
+      "max": 6
+    },
+    {
+      "id": "riftEcho",
+      "cost": 44000,
+      "growth": 7,
+      "max": 6
+    },
+    {
+      "id": "mintStar",
+      "cost": 18000,
+      "growth": 4.6,
+      "max": 6
+    },
+    {
+      "id": "beamArc",
+      "cost": 160000,
+      "growth": 4.4,
+      "max": 6
+    },
+    {
+      "id": "riftCollapse",
+      "cost": 240000,
+      "growth": 4.5,
+      "max": 6
+    },
+    {
+      "id": "starRift",
+      "cost": 800000,
+      "growth": 4.4,
+      "max": 6
+    },
+    {
+      "id": "finaleSalvo",
+      "cost": 1200000,
+      "growth": 4.5,
+      "max": 6
+    }
+  ]
+}

@@ -1,0 +1,800 @@
+[
+  {
+    "exponent": 1.2,
+    "seed": 0,
+    "path": [
+      {
+        "clear": 47.6,
+        "coins": 481399411,
+        "power": 29,
+        "combo": 172
+      },
+      {
+        "clear": 70.3,
+        "coins": 748759741,
+        "power": 33,
+        "combo": 224
+      }
+    ]
+  },
+  {
+    "exponent": 1.2,
+    "seed": 1,
+    "path": [
+      {
+        "clear": 47.1,
+        "coins": 293904200,
+        "power": 29,
+        "combo": 133
+      },
+      {
+        "clear": 69.4,
+        "coins": 689102302,
+        "power": 32,
+        "combo": 179
+      },
+      {
+        "clear": 76.2,
+        "coins": 912003818,
+        "power": 34,
+        "combo": 190
+      }
+    ]
+  },
+  {
+    "exponent": 1.2,
+    "seed": 2,
+    "path": [
+      {
+        "clear": 44.1,
+        "coins": 369835849,
+        "power": 29,
+        "combo": 118
+      },
+      {
+        "clear": 73.8,
+        "coins": 1042619384,
+        "power": 32,
+        "combo": 247
+      }
+    ]
+  },
+  {
+    "exponent": 1.35,
+    "seed": 0,
+    "path": [
+      {
+        "clear": 38.2,
+        "coins": 409291248,
+        "power": 29,
+        "combo": 158
+      },
+      {
+        "clear": 46.8,
+        "coins": 296296207,
+        "power": 33,
+        "combo": 130
+      },
+      {
+        "clear": 47.1,
+        "coins": 460582591,
+        "power": 33,
+        "combo": 122
+      },
+      {
+        "clear": 60.3,
+        "coins": 957179499,
+        "power": 34,
+        "combo": 232
+      },
+      {
+        "clear": 57.1,
+        "coins": 557923845,
+        "power": 36,
+        "combo": 228
+      },
+      {
+        "clear": 66.2,
+        "coins": 1223342416,
+        "power": 36,
+        "combo": 263
+      },
+      {
+        "clear": 72.1,
+        "coins": 1510184533,
+        "power": 37,
+        "combo": 343
+      }
+    ]
+  },
+  {
+    "exponent": 1.35,
+    "seed": 1,
+    "path": [
+      {
+        "clear": 33.8,
+        "coins": 125294045,
+        "power": 29,
+        "combo": 67
+      },
+      {
+        "clear": 46.5,
+        "coins": 478115691,
+        "power": 30,
+        "combo": 200
+      },
+      {
+        "clear": 52.9,
+        "coins": 968411943,
+        "power": 33,
+        "combo": 265
+      },
+      {
+        "clear": 60.3,
+        "coins": 722143674,
+        "power": 35,
+        "combo": 188
+      },
+      {
+        "clear": 59.7,
+        "coins": 794410327,
+        "power": 36,
+        "combo": 222
+      },
+      {
+        "clear": 69.1,
+        "coins": 935384670,
+        "power": 36,
+        "combo": 193
+      },
+      {
+        "clear": 67.4,
+        "coins": 868998482,
+        "power": 37,
+        "combo": 192
+      },
+      {
+        "clear": 68.5,
+        "coins": 960008620,
+        "power": 38,
+        "combo": 271
+      },
+      {
+        "clear": 69.4,
+        "coins": 749003397,
+        "power": 38,
+        "combo": 197
+      },
+      {
+        "clear": 70,
+        "coins": 1754482117,
+        "power": 38,
+        "combo": 373
+      }
+    ]
+  },
+  {
+    "exponent": 1.35,
+    "seed": 2,
+    "path": [
+      {
+        "clear": 31.5,
+        "coins": 263807008,
+        "power": 29,
+        "combo": 118
+      },
+      {
+        "clear": 48.5,
+        "coins": 607193742,
+        "power": 32,
+        "combo": 146
+      },
+      {
+        "clear": 56.2,
+        "coins": 651507602,
+        "power": 34,
+        "combo": 218
+      },
+      {
+        "clear": 64.1,
+        "coins": 834228390,
+        "power": 35,
+        "combo": 205
+      },
+      {
+        "clear": 60.9,
+        "coins": 783219622,
+        "power": 36,
+        "combo": 222
+      },
+      {
+        "clear": 66.2,
+        "coins": 830604567,
+        "power": 36,
+        "combo": 248
+      },
+      {
+        "clear": 70.3,
+        "coins": 776886814,
+        "power": 37,
+        "combo": 219
+      }
+    ]
+  },
+  {
+    "exponent": 1.5,
+    "seed": 0,
+    "path": [
+      {
+        "clear": 29.1,
+        "coins": 226470065,
+        "power": 29,
+        "combo": 139
+      },
+      {
+        "clear": 32.9,
+        "coins": 365617550,
+        "power": 31,
+        "combo": 194
+      },
+      {
+        "clear": 42.1,
+        "coins": 517013840,
+        "power": 33,
+        "combo": 203
+      },
+      {
+        "clear": 41.5,
+        "coins": 287947594,
+        "power": 34,
+        "combo": 105
+      },
+      {
+        "clear": 46.2,
+        "coins": 539134109,
+        "power": 35,
+        "combo": 231
+      },
+      {
+        "clear": 42.9,
+        "coins": 391423684,
+        "power": 36,
+        "combo": 204
+      },
+      {
+        "clear": 45.9,
+        "coins": 848071678,
+        "power": 36,
+        "combo": 300
+      },
+      {
+        "clear": 49.1,
+        "coins": 695418753,
+        "power": 36,
+        "combo": 260
+      },
+      {
+        "clear": 51.5,
+        "coins": 793950087,
+        "power": 37,
+        "combo": 262
+      },
+      {
+        "clear": 45,
+        "coins": 291830303,
+        "power": 37,
+        "combo": 151
+      },
+      {
+        "clear": 49.1,
+        "coins": 583932461,
+        "power": 38,
+        "combo": 210
+      },
+      {
+        "clear": 58.5,
+        "coins": 765240946,
+        "power": 38,
+        "combo": 280
+      },
+      {
+        "clear": 49.7,
+        "coins": 464225027,
+        "power": 38,
+        "combo": 227
+      },
+      {
+        "clear": 48.5,
+        "coins": 452959872,
+        "power": 38,
+        "combo": 174
+      },
+      {
+        "clear": 52.1,
+        "coins": 751566864,
+        "power": 39,
+        "combo": 250
+      }
+    ]
+  },
+  {
+    "exponent": 1.5,
+    "seed": 1,
+    "path": [
+      {
+        "clear": 26.8,
+        "coins": 97406679,
+        "power": 29,
+        "combo": 72
+      },
+      {
+        "clear": 35.6,
+        "coins": 345763511,
+        "power": 30,
+        "combo": 115
+      },
+      {
+        "clear": 35.3,
+        "coins": 321072441,
+        "power": 33,
+        "combo": 169
+      },
+      {
+        "clear": 43.8,
+        "coins": 432380503,
+        "power": 34,
+        "combo": 185
+      },
+      {
+        "clear": 45.6,
+        "coins": 502384310,
+        "power": 34,
+        "combo": 192
+      },
+      {
+        "clear": 49.7,
+        "coins": 889291893,
+        "power": 35,
+        "combo": 228
+      },
+      {
+        "clear": 54.1,
+        "coins": 692114728,
+        "power": 36,
+        "combo": 158
+      },
+      {
+        "clear": 52.1,
+        "coins": 654050201,
+        "power": 36,
+        "combo": 221
+      },
+      {
+        "clear": 57.1,
+        "coins": 839630566,
+        "power": 37,
+        "combo": 305
+      },
+      {
+        "clear": 56.2,
+        "coins": 1040213843,
+        "power": 37,
+        "combo": 279
+      },
+      {
+        "clear": 47.9,
+        "coins": 700931476,
+        "power": 38,
+        "combo": 264
+      },
+      {
+        "clear": 60.3,
+        "coins": 1002924277,
+        "power": 38,
+        "combo": 306
+      },
+      {
+        "clear": 55.6,
+        "coins": 1269137392,
+        "power": 39,
+        "combo": 396
+      },
+      {
+        "clear": 62.9,
+        "coins": 766984893,
+        "power": 39,
+        "combo": 221
+      },
+      {
+        "clear": 56.2,
+        "coins": 700230401,
+        "power": 39,
+        "combo": 230
+      }
+    ]
+  },
+  {
+    "exponent": 1.5,
+    "seed": 2,
+    "path": [
+      {
+        "clear": 25.3,
+        "coins": 203285492,
+        "power": 29,
+        "combo": 101
+      },
+      {
+        "clear": 37.6,
+        "coins": 280944167,
+        "power": 31,
+        "combo": 155
+      },
+      {
+        "clear": 36.2,
+        "coins": 264640629,
+        "power": 33,
+        "combo": 143
+      },
+      {
+        "clear": 43.5,
+        "coins": 414233749,
+        "power": 34,
+        "combo": 143
+      },
+      {
+        "clear": 41.2,
+        "coins": 404233125,
+        "power": 34,
+        "combo": 167
+      },
+      {
+        "clear": 42.6,
+        "coins": 359349605,
+        "power": 35,
+        "combo": 161
+      },
+      {
+        "clear": 56.5,
+        "coins": 788120384,
+        "power": 36,
+        "combo": 219
+      },
+      {
+        "clear": 47.4,
+        "coins": 593553502,
+        "power": 36,
+        "combo": 169
+      },
+      {
+        "clear": 50.3,
+        "coins": 763111773,
+        "power": 36,
+        "combo": 249
+      },
+      {
+        "clear": 52.9,
+        "coins": 591900361,
+        "power": 37,
+        "combo": 224
+      },
+      {
+        "clear": 47.6,
+        "coins": 453839742,
+        "power": 37,
+        "combo": 214
+      },
+      {
+        "clear": 59.7,
+        "coins": 724687965,
+        "power": 38,
+        "combo": 211
+      },
+      {
+        "clear": 60.3,
+        "coins": 809604440,
+        "power": 38,
+        "combo": 226
+      },
+      {
+        "clear": 56.8,
+        "coins": 1292823378,
+        "power": 38,
+        "combo": 363
+      },
+      {
+        "clear": 62.6,
+        "coins": 941786287,
+        "power": 39,
+        "combo": 263
+      }
+    ]
+  },
+  {
+    "exponent": 1.7,
+    "seed": 0,
+    "path": [
+      {
+        "clear": 23.5,
+        "coins": 191458573,
+        "power": 29,
+        "combo": 137
+      },
+      {
+        "clear": 29.4,
+        "coins": 304556268,
+        "power": 31,
+        "combo": 135
+      },
+      {
+        "clear": 27.6,
+        "coins": 182428062,
+        "power": 33,
+        "combo": 123
+      },
+      {
+        "clear": 33.2,
+        "coins": 571720882,
+        "power": 33,
+        "combo": 190
+      },
+      {
+        "clear": 32.6,
+        "coins": 327025664,
+        "power": 34,
+        "combo": 136
+      },
+      {
+        "clear": 40.3,
+        "coins": 389023783,
+        "power": 35,
+        "combo": 185
+      },
+      {
+        "clear": 42.6,
+        "coins": 490184011,
+        "power": 36,
+        "combo": 150
+      },
+      {
+        "clear": 41.8,
+        "coins": 766451895,
+        "power": 36,
+        "combo": 276
+      },
+      {
+        "clear": 33.5,
+        "coins": 265837477,
+        "power": 36,
+        "combo": 170
+      },
+      {
+        "clear": 37.1,
+        "coins": 403942655,
+        "power": 36,
+        "combo": 187
+      },
+      {
+        "clear": 49.1,
+        "coins": 878867690,
+        "power": 37,
+        "combo": 260
+      },
+      {
+        "clear": 43.5,
+        "coins": 944614844,
+        "power": 37,
+        "combo": 246
+      },
+      {
+        "clear": 48.2,
+        "coins": 1295055765,
+        "power": 38,
+        "combo": 368
+      },
+      {
+        "clear": 49.7,
+        "coins": 1127965642,
+        "power": 38,
+        "combo": 245
+      },
+      {
+        "clear": 50.9,
+        "coins": 899055065,
+        "power": 39,
+        "combo": 250
+      }
+    ]
+  },
+  {
+    "exponent": 1.7,
+    "seed": 1,
+    "path": [
+      {
+        "clear": 21.5,
+        "coins": 34062811,
+        "power": 29,
+        "combo": 29
+      },
+      {
+        "clear": 23.5,
+        "coins": 230597558,
+        "power": 29,
+        "combo": 142
+      },
+      {
+        "clear": 32.6,
+        "coins": 477767128,
+        "power": 32,
+        "combo": 161
+      },
+      {
+        "clear": 31.5,
+        "coins": 351297666,
+        "power": 33,
+        "combo": 157
+      },
+      {
+        "clear": 31.5,
+        "coins": 311878929,
+        "power": 34,
+        "combo": 152
+      },
+      {
+        "clear": 42.9,
+        "coins": 947007414,
+        "power": 35,
+        "combo": 292
+      },
+      {
+        "clear": 35.3,
+        "coins": 439372085,
+        "power": 36,
+        "combo": 228
+      },
+      {
+        "clear": 37.1,
+        "coins": 343020120,
+        "power": 36,
+        "combo": 159
+      },
+      {
+        "clear": 39.4,
+        "coins": 327929788,
+        "power": 36,
+        "combo": 189
+      },
+      {
+        "clear": 42.4,
+        "coins": 601864888,
+        "power": 36,
+        "combo": 173
+      },
+      {
+        "clear": 45.6,
+        "coins": 1099243528,
+        "power": 37,
+        "combo": 280
+      },
+      {
+        "clear": 50.6,
+        "coins": 756803782,
+        "power": 38,
+        "combo": 234
+      },
+      {
+        "clear": 38.8,
+        "coins": 301931323,
+        "power": 38,
+        "combo": 150
+      },
+      {
+        "clear": 40.3,
+        "coins": 655564592,
+        "power": 38,
+        "combo": 258
+      },
+      {
+        "clear": 48.5,
+        "coins": 929104880,
+        "power": 38,
+        "combo": 304
+      }
+    ]
+  },
+  {
+    "exponent": 1.7,
+    "seed": 2,
+    "path": [
+      {
+        "clear": 22.1,
+        "coins": 207357146,
+        "power": 29,
+        "combo": 106
+      },
+      {
+        "clear": 27.6,
+        "coins": 142470122,
+        "power": 31,
+        "combo": 89
+      },
+      {
+        "clear": 29.1,
+        "coins": 235623533,
+        "power": 32,
+        "combo": 117
+      },
+      {
+        "clear": 31.5,
+        "coins": 190746781,
+        "power": 33,
+        "combo": 134
+      },
+      {
+        "clear": 32.9,
+        "coins": 354298813,
+        "power": 34,
+        "combo": 194
+      },
+      {
+        "clear": 35.3,
+        "coins": 340194949,
+        "power": 34,
+        "combo": 134
+      },
+      {
+        "clear": 33.5,
+        "coins": 252503499,
+        "power": 35,
+        "combo": 158
+      },
+      {
+        "clear": 40.6,
+        "coins": 494528651,
+        "power": 35,
+        "combo": 179
+      },
+      {
+        "clear": 37.6,
+        "coins": 354422897,
+        "power": 36,
+        "combo": 201
+      },
+      {
+        "clear": 43.8,
+        "coins": 549967790,
+        "power": 36,
+        "combo": 170
+      },
+      {
+        "clear": 42.6,
+        "coins": 427438566,
+        "power": 36,
+        "combo": 163
+      },
+      {
+        "clear": 35.9,
+        "coins": 243232152,
+        "power": 36,
+        "combo": 156
+      },
+      {
+        "clear": 43.8,
+        "coins": 916563913,
+        "power": 37,
+        "combo": 308
+      },
+      {
+        "clear": 38.2,
+        "coins": 305863664,
+        "power": 37,
+        "combo": 177
+      },
+      {
+        "clear": 44.7,
+        "coins": 766692732,
+        "power": 38,
+        "combo": 272
+      }
+    ]
+  }
+]

@@ -1,0 +1,14 @@
+{
+  "name": "corebound",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build --base=/physicsincremental/",
+    "preview": "vite preview --host 127.0.0.1",
+    "playtest": "node scripts/playtest.mjs"
+  },
+  "dependencies": { "pixi.js": "^8.17.0" },
+  "devDependencies": { "vite": "^7.1.0" }
+}

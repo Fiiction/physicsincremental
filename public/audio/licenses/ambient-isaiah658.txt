@@ -1,0 +1,17 @@
+Ambient Relaxing Loop
+Author: isaiah658
+Source: https://opengameart.org/content/ambient-relaxing-loop
+Original file: Ambient-Loop-isaiah658_0.ogg
+Download: https://opengameart.org/sites/default/files/Ambient-Loop-isaiah658_0.ogg
+Retrieved: 2026-09-13
+License: CC0 1.0 Universal
+License URL: https://creativecommons.org/publicdomain/zero/1.0/
+Legal text: https://creativecommons.org/publicdomain/zero/1.0/legalcode
+
+The author explicitly places the audio under CC0 on the source page.
+No attribution is required; this project voluntarily credits isaiah658.
+The author states that this is an original ZynAddSubFX / Audacity creation.
+
+Local filename: ambient-isaiah658.ogg
+The downloaded audio bytes are unchanged. The game adjusts playback rate,
+filtering, level and fades at runtime. No external audio requests occur at runtime.

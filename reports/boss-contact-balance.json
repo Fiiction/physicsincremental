@@ -1,0 +1,283 @@
+{
+  "generatedAt": "2026-09-13T11:14:08.610Z",
+  "samples": 12,
+  "parameters": {
+    "clearDamageFraction": 0.01,
+    "directDamageMultipliers": [
+      1,
+      1,
+      1,
+      8,
+      48
+    ]
+  },
+  "method": "Actual shared Game simulation; naturally earned research, full-power automatic aim, fresh boss each run, 12 deterministic campaign seeds. Farming comparison copies omitted because they do not affect campaign progression. No player resources granted.",
+  "rerun": "node scripts/playtest.mjs 12 --campaign-only",
+  "baseline": {
+    "samples": 3,
+    "multipliers": [
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    "challengeRunsMedian": [
+      3,
+      2,
+      3,
+      8,
+      13
+    ],
+    "note": "Preliminary runtime patch, before live area target exclusions; use as diagnosis, not identical final baseline."
+  },
+  "completed": 12,
+  "sourceVerification": {
+    "victories": 60,
+    "allVictoriesIncludeRealBallContacts": true,
+    "onlyDirectOrMineChipDamage": true,
+    "minimumRealContactsInVictory": 8,
+    "minimumWinningDirectHitsPerChapter": [
+      12,
+      8,
+      13,
+      16,
+      20
+    ]
+  },
+  "chapters": [
+    {
+      "name": "初生矿庭",
+      "hp": 4000,
+      "threshold": 0.5,
+      "challengeRunsMedian": 3,
+      "challengeRunsRange": [
+        2,
+        4
+      ],
+      "firstEncounterRemainingHPPercentMedian": 68.5,
+      "victoriousBossSecondsMedian": 14.18,
+      "hitSources": {
+        "direct": {
+          "hits": 615,
+          "damage": 56515.102132842454
+        },
+        "mineChip": {
+          "hits": 1274,
+          "damage": 29249.322324088556
+        }
+      }
+    },
+    {
+      "name": "余烬铸造厂",
+      "hp": 500000,
+      "threshold": 0.52,
+      "challengeRunsMedian": 2,
+      "challengeRunsRange": [
+        1,
+        2
+      ],
+      "firstEncounterRemainingHPPercentMedian": 34.3,
+      "victoriousBossSecondsMedian": 18.23,
+      "hitSources": {
+        "mineChip": {
+          "hits": 2654,
+          "damage": 6510427.420084961
+        },
+        "direct": {
+          "hits": 818,
+          "damage": 2541284.139214732
+        }
+      }
+    },
+    {
+      "name": "折跃织井",
+      "hp": 200000000,
+      "threshold": 0.52,
+      "challengeRunsMedian": 3,
+      "challengeRunsRange": [
+        2,
+        4
+      ],
+      "firstEncounterRemainingHPPercentMedian": 27.1,
+      "victoriousBossSecondsMedian": 15.96,
+      "hitSources": {
+        "direct": {
+          "hits": 2314,
+          "damage": 875076812.4258329
+        },
+        "mineChip": {
+          "hits": 4968,
+          "damage": 4862556450.5396595
+        }
+      }
+    },
+    {
+      "name": "共振棱镜",
+      "hp": 20000000000,
+      "threshold": 0.55,
+      "challengeRunsMedian": 3,
+      "challengeRunsRange": [
+        2,
+        3
+      ],
+      "firstEncounterRemainingHPPercentMedian": 9.2,
+      "victoriousBossSecondsMedian": 39.32,
+      "hitSources": {
+        "direct": {
+          "hits": 2395,
+          "damage": 145133576523.82388
+        },
+        "mineChip": {
+          "hits": 4867,
+          "damage": 444945515321.9226
+        }
+      }
+    },
+    {
+      "name": "终光圣殿",
+      "hp": 150000000000,
+      "threshold": 0.55,
+      "challengeRunsMedian": 3,
+      "challengeRunsRange": [
+        2,
+        3
+      ],
+      "firstEncounterRemainingHPPercentMedian": 70.8,
+      "victoriousBossSecondsMedian": 21.3,
+      "hitSources": {
+        "mineChip": {
+          "hits": 668,
+          "damage": 625004239010.062
+        },
+        "direct": {
+          "hits": 870,
+          "damage": 2052819895971.9258
+        }
+      }
+    }
+  ],
+  "chapterCompletedAt": [
+    {
+      "seed": 17,
+      "runs": [
+        14,
+        17,
+        20,
+        22,
+        25
+      ]
+    },
+    {
+      "seed": 7936,
+      "runs": [
+        13,
+        16,
+        19,
+        22,
+        26
+      ]
+    },
+    {
+      "seed": 15855,
+      "runs": [
+        14,
+        16,
+        20,
+        23,
+        27
+      ]
+    },
+    {
+      "seed": 23774,
+      "runs": [
+        13,
+        16,
+        19,
+        22,
+        24
+      ]
+    },
+    {
+      "seed": 31693,
+      "runs": [
+        12,
+        16,
+        18,
+        21,
+        24
+      ]
+    },
+    {
+      "seed": 39612,
+      "runs": [
+        12,
+        15,
+        17,
+        19,
+        22
+      ]
+    },
+    {
+      "seed": 47531,
+      "runs": [
+        13,
+        16,
+        19,
+        22,
+        25
+      ]
+    },
+    {
+      "seed": 55450,
+      "runs": [
+        14,
+        17,
+        21,
+        24,
+        26
+      ]
+    },
+    {
+      "seed": 63369,
+      "runs": [
+        14,
+        17,
+        20,
+        22,
+        26
+      ]
+    },
+    {
+      "seed": 71288,
+      "runs": [
+        12,
+        15,
+        18,
+        21,
+        24
+      ]
+    },
+    {
+      "seed": 79207,
+      "runs": [
+        15,
+        17,
+        20,
+        22,
+        26
+      ]
+    },
+    {
+      "seed": 87126,
+      "runs": [
+        13,
+        16,
+        19,
+        21,
+        25
+      ]
+    }
+  ],
+  "note": "Combat time excludes reading, aiming and shopping. Current-health chip cannot finish a boss; no area source registered boss damage. This checks playability and damage attribution, not subjective fun."
+}
