@@ -1,0 +1,228 @@
+{
+  "date": "2026-09-14",
+  "scope": "Headless, 12 seeded full-buff late-game runs per process; three independent process pairs with V8 CPU sampling, same pre-balance-change data. Simulation timing, not browser FPS.",
+  "summaries": {
+    "before": {
+      "totalMs": 260.25,
+      "frameP99Ms": 1.811,
+      "frameP95Ms": 0.433
+    },
+    "after": {
+      "totalMs": 217.43,
+      "frameP99Ms": 1.275,
+      "frameP95Ms": 0.439
+    }
+  },
+  "tail": {
+    "returnRift": {
+      "before": 4.05,
+      "after": 0.6,
+      "pulses": 9,
+      "sameTotalDamage": true
+    },
+    "starCollapseRift": {
+      "before": 2.65,
+      "after": 0.6,
+      "pulses": 4,
+      "sameTotalDamage": true
+    },
+    "emptyReturnRift": {
+      "before": 4.05,
+      "after": 0.0083
+    }
+  },
+  "checks": [
+    "Mid-tail snapshot restore",
+    "Physical return unchanged",
+    "Boss ceremony unchanged",
+    "Wallet values 4e12/7e12 survive serialization",
+    "Invalid wallet values rejected"
+  ],
+  "samples": [
+    {
+      "totalMs": 232.14,
+      "frameP95Ms": 0.395,
+      "kind": "before",
+      "frameP99Ms": 1.705,
+      "cpuTop": [
+        {
+          "functionName": "update @ shot-perf-game-before.mjs:940",
+          "ms": 36.2
+        },
+        {
+          "functionName": "(anonymous) @ shot-perf-game-before.mjs:838",
+          "ms": 30.5
+        },
+        {
+          "functionName": "(garbage collector) @ :0",
+          "ms": 18.4
+        },
+        {
+          "functionName": "post @ node:inspector:115",
+          "ms": 15.8
+        },
+        {
+          "functionName": "tick @ shot-perf-game-before.mjs:1018",
+          "ms": 13.9
+        }
+      ]
+    },
+    {
+      "totalMs": 217.43,
+      "frameP95Ms": 0.445,
+      "kind": "after",
+      "frameP99Ms": 1.314,
+      "cpuTop": [
+        {
+          "functionName": "update @ game.js:955",
+          "ms": 32.6
+        },
+        {
+          "functionName": "(garbage collector) @ :0",
+          "ms": 20.8
+        },
+        {
+          "functionName": "post @ node:inspector:115",
+          "ms": 16.6
+        },
+        {
+          "functionName": "damage @ game.js:375",
+          "ms": 13.8
+        },
+        {
+          "functionName": "tick @ game.js:1046",
+          "ms": 13.1
+        }
+      ]
+    },
+    {
+      "totalMs": 266.78,
+      "frameP95Ms": 0.433,
+      "kind": "before",
+      "frameP99Ms": 1.898,
+      "cpuTop": [
+        {
+          "functionName": "update @ shot-perf-game-before.mjs:940",
+          "ms": 33.2
+        },
+        {
+          "functionName": "(anonymous) @ shot-perf-game-before.mjs:838",
+          "ms": 29.1
+        },
+        {
+          "functionName": "(garbage collector) @ :0",
+          "ms": 27.3
+        },
+        {
+          "functionName": "tick @ shot-perf-game-before.mjs:1018",
+          "ms": 21.8
+        },
+        {
+          "functionName": "post @ node:inspector:115",
+          "ms": 17.4
+        }
+      ]
+    },
+    {
+      "totalMs": 211.39,
+      "frameP95Ms": 0.438,
+      "kind": "after",
+      "frameP99Ms": 1.275,
+      "cpuTop": [
+        {
+          "functionName": "update @ game.js:955",
+          "ms": 31.9
+        },
+        {
+          "functionName": "(garbage collector) @ :0",
+          "ms": 23.9
+        },
+        {
+          "functionName": "post @ node:inspector:115",
+          "ms": 17.4
+        },
+        {
+          "functionName": "lineHitsBlock @ game.js:252",
+          "ms": 16.8
+        },
+        {
+          "functionName": "tick @ game.js:1046",
+          "ms": 13.6
+        }
+      ]
+    },
+    {
+      "totalMs": 260.25,
+      "frameP95Ms": 0.448,
+      "kind": "before",
+      "frameP99Ms": 1.811,
+      "cpuTop": [
+        {
+          "functionName": "update @ shot-perf-game-before.mjs:940",
+          "ms": 33.9
+        },
+        {
+          "functionName": "(anonymous) @ shot-perf-game-before.mjs:838",
+          "ms": 33.1
+        },
+        {
+          "functionName": "(garbage collector) @ :0",
+          "ms": 25.9
+        },
+        {
+          "functionName": "post @ node:inspector:115",
+          "ms": 17.8
+        },
+        {
+          "functionName": "damage @ shot-perf-game-before.mjs:374",
+          "ms": 13.8
+        }
+      ]
+    },
+    {
+      "totalMs": 218.6,
+      "frameP95Ms": 0.439,
+      "kind": "after",
+      "frameP99Ms": 1.237,
+      "cpuTop": [
+        {
+          "functionName": "update @ game.js:955",
+          "ms": 37.5
+        },
+        {
+          "functionName": "(garbage collector) @ :0",
+          "ms": 20.3
+        },
+        {
+          "functionName": "tick @ game.js:1046",
+          "ms": 16.6
+        },
+        {
+          "functionName": "post @ node:inspector:115",
+          "ms": 16
+        },
+        {
+          "functionName": "lineHitsBlock @ game.js:252",
+          "ms": 14.1
+        }
+      ]
+    }
+  ],
+  "outcomesMatched": true,
+  "lineAllocationFollowup": {
+    "scope": "One independent process pair after chapter balance growth, same 12 seeds and profiles; outcomes also matched. Sample only, not a browser measurement.",
+    "before": {
+      "frameP95Ms": 0.394,
+      "totalMs": 1488.62,
+      "frameP99Ms": 0.702,
+      "lineHitsBlockSampleMs": 423.7
+    },
+    "after": {
+      "frameP95Ms": 0.276,
+      "totalMs": 1233.78,
+      "frameP99Ms": 0.61,
+      "lineHitsBlockSampleMs": 123.5
+    },
+    "currentSeedTailMaximumSeconds": 0.617
+  }
+}

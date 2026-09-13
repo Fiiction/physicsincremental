@@ -57,7 +57,8 @@ export function applyResearchCamera(viewport,state) {
     world.querySelector('.research-connections').style.transform=size.portrait?'matrix(0,1,1,0,0,0)':'';
   }
   world.style.transform=`translate(${state.x}px,${state.y}px) scale(${scale})`;
-  world.style.setProperty('--label-size',`${Math.max(13,10/scale)}px`);
+  const uiScale = typeof getComputedStyle === 'function' ? parseFloat(getComputedStyle(document.documentElement).fontSize) / 16 : 1;
+  world.style.setProperty('--label-size',`${Math.max(13,10*uiScale/scale)}px`);
   viewport.classList.toggle('micro',scale<.32);viewport.dataset.zoom=state.zoom.toFixed(2);
   const dialog=viewport.closest('dialog');
   if(dialog){

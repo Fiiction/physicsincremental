@@ -3,6 +3,7 @@ import { Game, createProfile, sanitizeProfile, upgradeCost, upgradeStatus } from
 import { Renderer } from './renderer.js';
 import { idleSnapshot } from './idle.js';
 import { FrameLoop } from './frame-loop.js';
+import presentation from './data/presentation.json' with { type: 'json' };
 import { researchBranches, researchGroup, researchScene, attachResearchCamera, applyResearchCamera, zoomResearch, focusResearchNode } from './research-view.js';
 import './style.css';
 
@@ -18,7 +19,7 @@ try { profile = saved ? sanitizeProfile(saved.profile, data) : createProfile(); 
 let game = new Game(data, profile);
 if (saved?.run) game.restore(saved.run);
 let view, modal = '', uiClock = 0, saveClock = 0, practiceBackup = null, practicePaused = false, practiceKind = '', practiceDrop = 'arc', pausedBeforeModal = false, selectedTech = 'power';
-let loop, simulatedThrough = Date.now();
+let loop, simulatedThrough = Date.now(), renderClock = 0, researchedRun = null;
 // Old versions stored a background-replay marker. Live play never replays saved time.
 try { sessionStorage.removeItem(SAVE_KEY + '.background'); } catch { /* Optional legacy cleanup. */ }
 const researchView = {zoom:1,x:0,y:0,recent:null};
@@ -187,7 +188,8 @@ function renderOverlay() {
   if (game.paused && !modal) { setHTML('arena-overlay', '<div class="pause-card"><button class="resume-button" data-action="pause" aria-label="继续游戏" title="继续">▶</button></div>'); return; }
   if (game.state !== 'ended') { setHTML('arena-overlay', ''); return; }
   const failed=game.boss?.alive, remaining=failed?Math.ceil(game.boss.hp/game.boss.maxHP*100):0;
-  setHTML('arena-overlay', `<div class="settlement ${failed?'boss-failed':''}"><h2>${game.run.bossDefeated ? '首领已击破' : failed ? '守卫未破' : game.goalComplete ? '区域完成' : '开采完成'}</h2>${failed?`<div class="boss-remnant" style="--damage:${1-game.boss.hp/game.boss.maxHP}" aria-hidden="true"></div><p class="boss-result">${game.chapter.boss.name} · 剩余 ${remaining}%</p>`:''}<div class="result-income"><span>✦</span>+${format(game.run.coins)}</div><div class="result-stats"><span title="击碎方块">□ <b>${game.run.kills}</b></span><span title="最高连击">× <b>${game.run.combo}</b></span></div><div class="result-actions"><button class="secondary-button" data-action="tech">升级</button><button class="secondary-button" data-action="chapters">选关</button><button class="primary-button" data-action="${practiceBackup ? 'leave-practice' : game.goalComplete ? 'advance' : 'restart'}">${practiceBackup ? '退出试玩' : game.goalComplete ? '突破 →' : failed ? '再挑战 →' : '继续 →'}</button></div>${practiceBackup?'<small>独立试玩 · 不影响存档</small>':failed?'<small>矿晶已保留 · 下局重新挑战</small>':game.auto ? `<small>${game.goalComplete ? '突破后选择下一站' : '自动续局'}</small>` : ''}</div>`);
+  const upgradeFirst = researchedRun !== game.run;
+  setHTML('arena-overlay', `<div class="settlement ${failed?'boss-failed':''}"><h2>${game.run.bossDefeated ? '首领已击破' : failed ? '守卫未破' : game.goalComplete ? '区域完成' : '开采完成'}</h2>${failed?`<div class="boss-remnant" style="--damage:${1-game.boss.hp/game.boss.maxHP}" aria-hidden="true"></div><p class="boss-result">${game.chapter.boss.name} · 剩余 ${remaining}%</p>`:''}<div class="result-income"><span>✦</span>+${format(game.run.coins)}</div><div class="result-stats"><span title="击碎方块">□ <b>${game.run.kills}</b></span><span title="最高连击">× <b>${game.run.combo}</b></span></div><div class="result-actions"><button class="${upgradeFirst ? 'primary-button' : 'secondary-button'}" data-action="tech">升级</button><button class="secondary-button" data-action="chapters">选关</button><button class="${upgradeFirst ? 'secondary-button' : 'primary-button'}" data-action="${practiceBackup ? 'leave-practice' : game.goalComplete ? 'advance' : 'restart'}">${practiceBackup ? '退出试玩' : game.goalComplete ? '突破 →' : failed ? '再挑战 →' : '继续 →'}</button></div>${practiceBackup?'<small>独立试玩 · 不影响存档</small>':failed?'<small>矿晶已保留 · 下局重新挑战</small>':game.auto ? `<small>${game.goalComplete ? '突破后选择下一站' : '自动续局'}</small>` : ''}</div>`);
 }
 function onAction(type, payload) {
   if (type === 'frame') {
@@ -195,15 +197,23 @@ function onAction(type, payload) {
     if (view.drag && game.state === 'ready') game.idleTime = 0;
     game.tick(payload);
     const events = game.events.splice(0);
+    let persist = false;
     for (const e of events) {
       if (e.type === 'shotend' && e.timeout) toast('弹射结束');
       if (e.type === 'drop' && ['cache','charge'].includes(e.id)) document.querySelector(e.id==='charge'?'.shots-box':'.wallet').animate([{transform:'scale(1)'},{transform:'scale(1.22)'},{transform:'scale(1)'}],{duration:420});
-      if (['runend', 'core', 'upgrade'].includes(e.type)) { console.info('[COREBOUND]', game.logs.at(-1)); save(); }
+      if (['runend', 'core', 'upgrade'].includes(e.type)) persist = true;
     }
-    view.events(events); view.render(payload); view.app.render();
+    view.events(events); renderClock += payload;
+    // The menu covers most of the arena. Keep simulation and audio live, reserve UI time for input.
+    if (!modal || renderClock + 1e-6 >= 1 / presentation.menuFPS) {
+      view.render(renderClock); view.app.render(); renderClock = 0;
+    }
     uiClock += payload; saveClock += payload;
     if (uiClock > 0.12) { updateUI(); uiClock = 0; }
-    if (saveClock >= 1) { save(); saveClock = 0; updateTitle(); }
+    if (persist || saveClock >= 1) {
+      if (persist) console.info('[Physics Incremental]', game.logs.at(-1));
+      save(); saveClock = 0; updateTitle();
+    }
   } else if (type === 'launch') { if (settleClock() && game.launch(payload.angle, payload.power)) { updateUI(); save(); } }
   else if (type === 'hint') toast(payload);
 }
@@ -220,8 +230,8 @@ function action(name) {
   else if (name === 'chapters') openModal(!practiceBackup && game.state === 'ended' && game.goalComplete ? 'advance' : 'chapters');
   else if (name === 'advance') { if (practiceBackup) leavePractice(); else openModal('advance'); }
   else if (name === 'leave-practice') leavePractice();
-  else if (name === 'export') download('corebound-save.json', { profile: (practiceBackup || game).profile, run: idleSnapshot(practiceBackup || game, practiceBackup ? practicePaused : manualPause()), savedAt: simulatedThrough });
-  else if (name === 'export-logs') download('corebound-run-log.json', { date: new Date().toISOString(), chapter: game.chapter.name, events: game.logs, history: game.profile.history });
+  else if (name === 'export') download('physics-incremental-save.json', { profile: (practiceBackup || game).profile, run: idleSnapshot(practiceBackup || game, practiceBackup ? practicePaused : manualPause()), savedAt: simulatedThrough });
+  else if (name === 'export-logs') download('physics-incremental-run-log.json', { date: new Date().toISOString(), chapter: game.chapter.name, events: game.logs, history: game.profile.history });
   else if (name === 'import') $('import-file').click();
   else if (name === 'reset-confirm') {
     if ($('reset-word')?.value !== '重新开始') { toast('请输入「重新开始」以确认'); return; }
@@ -267,6 +277,7 @@ document.addEventListener('click', event => {
 });
 function openModal(name) {
   if (!settleClock()) return;
+  if (name === 'tech' && game.state === 'ended') researchedRun = game.run;
   if (!modal) pausedBeforeModal = game.paused;
   if(name==='tech'&&!modal) {Object.assign(researchView,{zoom:1,x:0,y:0,recent:null});selectedTech=null;}
   modal = name; game.paused = pausedBeforeModal || !game.auto; view.menuOpen = true; view.drag = null; renderModal();
@@ -334,7 +345,7 @@ function renderModal() {
     content = title('记录');
     content += `<div class="record-totals"><div><b>${format(p.earned)}</b><span>累计矿晶</span></div><div><b>${format(p.totalKills)}</b><span>击碎方块</span></div><div><b>${p.bestCombo}×</b><span>最高连击</span></div><div><b>${p.prestige}</b><span>奇点跃迁</span></div></div>`;
     const max = Math.max(1, ...p.history.map(h => h.coins));
-    content += p.history.length ? `<div class="history-chart">${p.history.map((h, i) => `<div title="第 ${Math.max(1, p.runs - p.history.length + i + 1)} 局：${h.coins} 矿晶，${h.combo} 连击"><span>${format(h.coins)}</span><i style="height:${10 + h.coins / max * 100}px;background:${data.chapters[h.chapter].color}"></i><small>${Math.max(1, p.runs - p.history.length + i + 1)}</small></div>`).join('')}</div><div class="history-table"><div class="table-head"><span>区域</span><span>矿晶</span><span>连击</span><span>弹射</span></div>${p.history.slice().reverse().map(h => `<div><span>${data.chapters[h.chapter].name} <small>${h.auto ? '自动' : ''}</small></span><b>${format(h.coins)}</b><span>${h.combo}×</span><span>${h.shots}</span></div>`).join('')}</div>` : '<p class="empty-record">暂无记录</p>';
+    content += p.history.length ? `<div class="history-chart">${p.history.map((h, i) => `<div title="第 ${Math.max(1, p.runs - p.history.length + i + 1)} 局：${h.coins} 矿晶，${h.combo} 连击"><span>${format(h.coins)}</span><i style="height:${(10 + h.coins / max * 100)/16}rem;background:${data.chapters[h.chapter].color}"></i><small>${Math.max(1, p.runs - p.history.length + i + 1)}</small></div>`).join('')}</div><div class="history-table"><div class="table-head"><span>区域</span><span>矿晶</span><span>连击</span><span>弹射</span></div>${p.history.slice().reverse().map(h => `<div><span>${data.chapters[h.chapter].name} <small>${h.auto ? '自动' : ''}</small></span><b>${format(h.coins)}</b><span>${h.combo}×</span><span>${h.shots}</span></div>`).join('')}</div>` : '<p class="empty-record">暂无记录</p>';
   } else if (modal === 'help') {
     content = title('操作');
     content += `<div class="help-list"><p><b>拖拽圆球</b><span>反向发射，拉远蓄力</span></p><p><b>↑ ↓ ← → / 空格</b><span>瞄准 / 满力发射</span></p><p><b>A / P</b><span>自动 / 暂停</span></p><p><b>方形空洞</b><span>边长随损伤增加</span></p><p><b>◇ / ♛</b><span>普通宝箱 / 稀有宝库；透视可见内容</span></p><p><b>× 连击</b><span>十连色散 · 连击推动色相</span></p><p><b>中心首领</b><span>清场唤醒 · 用剩余弹射击破后过关</span></p><p><b>挑战失败</b><span>保留矿晶；升级后下局重新唤醒满血首领</span></p><p><b>折跃门</b><span>第三关起双向传送</span></p><p><b>终光裁切</b><span>第五关每 40 连击斜交切割</span></p><p><b>热尾 / 卫星 / 波纹 / 蓝芯</b><span>动能 / 分裂 / 冲击 / 穿透</span></p></div><p class="fine-print">选关可重返已解锁区域。强化每局重置，下一发生效，满层转矿晶。自动引航后台可继续开采。</p>`;
@@ -451,7 +462,7 @@ function settleClock() {
   return true;
 }
 function updateTitle() {
-  document.title = isBackgroundPage() ? `✦ ${format(game.profile.coins)} · 核芯弹射` : '核芯弹射 · COREBOUND';
+  document.title = 'Physics Incremental by Fiiction';
 }
 function syncPresence() {
   if (!view) return;
@@ -485,7 +496,7 @@ window.corebound = { get game() { return game; }, get renderer() { return view; 
 const modelContext = document.modelContext;
 if (modelContext?.registerTool) {
   const register = tool => { try { Promise.resolve(modelContext.registerTool(tool)).catch(error => console.warn('WebMCP registration', error)); } catch (error) { console.warn('WebMCP registration', error); } };
-  register({ name: 'read_game_state', description: '读取核芯弹射的当前可见游戏状态、主线与资源。', inputSchema: { type: 'object', properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true }, execute: () => { const state=window.corebound.getState(); return { ...state, goalComplete:state.run.bossVersion===1 ? !state.pendingChapterSelection&&state.isFrontier&&state.run.bossDefeated : game.goalComplete, practice:!!practiceBackup, stats:game.stats }; } });
+  register({ name: 'read_game_state', description: '读取Physics Incremental的当前可见游戏状态、主线与资源。', inputSchema: { type: 'object', properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true }, execute: () => { const state=window.corebound.getState(); return { ...state, goalComplete:state.run.bossVersion===1 ? !state.pendingChapterSelection&&state.isFrontier&&state.run.bossDefeated : game.goalComplete, practice:!!practiceBackup, stats:game.stats }; } });
   register({ name: 'launch_ball', description: '按指定角度与力度发射弹球；消耗本局一次弹射。', inputSchema: { type: 'object', properties: { angle: { type: 'number' }, power: { type: 'number', minimum: 0.3, maximum: 1 } }, required: ['angle', 'power'], additionalProperties: false }, annotations: { readOnlyHint: false }, execute: input => { if (!input || !Number.isFinite(input.angle) || !Number.isFinite(input.power) || input.power < 0.3 || input.power > 1) throw new Error('角度须为弧度，力度须在 0.3 至 1 之间'); const launched = !modal && !document.hidden && game.launch(input.angle, input.power); updateUI(); save(); return { launched, ...window.corebound.getState() }; } });
   register({ name: 'start_mechanic_preview', description: '进入独立的章节机制试玩。保留正式进度，暂停正式开采。', inputSchema: { type: 'object', properties: { chapter: { type: 'integer', minimum: 0, maximum: data.chapters.length-1 } }, required: ['chapter'], additionalProperties: false }, annotations: { readOnlyHint: false }, execute: input => { if (!Number.isInteger(input?.chapter) || input.chapter < 0 || input.chapter >= data.chapters.length) throw new Error(`章节须为 0 到 ${data.chapters.length-1}`); return { started: startPractice(input.chapter), ...window.corebound.getState() }; } });
   register({ name: 'leave_mechanic_preview', description: '结束机制试玩，恢复正式开采进度。', inputSchema: { type: 'object', properties: {}, additionalProperties: false }, annotations: { readOnlyHint: false }, execute: () => ({ restored: leavePractice(), ...window.corebound.getState() }) });

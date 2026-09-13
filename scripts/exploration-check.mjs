@@ -69,7 +69,7 @@ for(let chapter=0;chapter<data.chapters.length;chapter++) {
   else {
     for(const block of current.blocks) {
       const old=previous.blocks.find(b=>b.id===block.id);
-      assert.equal(current.percentDamage(block,.1),old.maxHP*.1,'Reinforcement raised percentage damage, including a generated rare box');
+      assert.equal(current.percentDamage(block,.1),previous.percentDamage(old,.1),'Reinforcement raised percentage damage beyond the chapter-scaled native basis, including a generated rare box');
       if(block.ring===2)assert.equal(block.maxHP,old.maxHP,'Reinforcement changed the entrance');
       else assert(block.maxHP>old.maxHP,'An outer block did not receive its reinforcement');
     }

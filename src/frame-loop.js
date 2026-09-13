@@ -5,10 +5,14 @@ export class FrameLoop {
     this.onFrame = onFrame; this.config = config; this.onInterrupt = onInterrupt;
     this.running = false;
   }
-  reset() { this.previous = performance.now(); }
+  reset() { this.previous = performance.now(); this.nextFrame = this.previous + (this.config.frameMs ?? 1000 / 60); }
   frame(now = performance.now()) {
+    if (now + .1 < this.nextFrame) return;
+    const interval = this.config.frameMs ?? 1000 / 60;
     const seconds = Math.max(0, now - this.previous) / 1000;
     this.previous = now;
+    // High-refresh displays and embedded browsers must not submit hundreds of redundant frames.
+    this.nextFrame = now + interval - Math.max(0, now - this.nextFrame) % interval;
     if (seconds > (this.config.maxTickSeconds ?? 2)) {
       this.onInterrupt(seconds); this.onFrame(0); // Refresh, but never replay a freeze.
     } else if (seconds > 0) this.onFrame(seconds);
@@ -36,7 +40,7 @@ export class FrameLoop {
       worker.onerror = event => {
         event.preventDefault?.(); worker.terminate();
         if (this.worker === worker) this.worker = null;
-        console.warn('[COREBOUND] Frame clock unavailable; continuing with the page timer.');
+        console.warn('[Physics Incremental] Frame clock unavailable; continuing with the page timer.');
       };
       worker.postMessage(interval);
     } catch { this.worker = null; }

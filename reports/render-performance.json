@@ -1,0 +1,16 @@
+{
+  "date": "2026-09-14",
+  "scope": "Real WebGL CPU submission in the connected desktop browser, not GPU completion time or a universal FPS guarantee. One sequential diagnostic sample; OS/GPU contention and browser warm caches affect absolute values.",
+  "baselineRendererCommit": "c8b73390236241ad7d96bf6f770f4fc5cb80ab64",
+  "fixture": "Same current Game and data for both renderers, normal chapter HP overridden to [1,60,25000,5600000,450000000], seed 54157, endgame preview build. 120 simulation steps per case, independent memory, 900px square canvas. Initial scene events discarded; creation measured separately. No audio or player save access.",
+  "cases": [
+    {"name":"baseline","chapter":3,"menu":false,"initializationMs":1695.1,"rebuildMedianMs":1548.6,"frameMedianMs":2.6,"frameP95Ms":7.7,"frameMaxMs":206.6,"physicsP95Ms":0.6,"eventsP95Ms":0.4,"drawP95Ms":7.2,"drawCalls":120,"peakRings":240,"peakEvents":321,"blocksBroken":289,"combo":1060},
+    {"name":"baseline","chapter":5,"menu":false,"initializationMs":1655.2,"rebuildMedianMs":1401.3,"frameMedianMs":5.4,"frameP95Ms":37.8,"frameMaxMs":201.6,"physicsP95Ms":0.9,"eventsP95Ms":0.7,"drawP95Ms":36.4,"drawCalls":120,"peakRings":178,"peakEvents":345,"blocksBroken":202,"combo":619},
+    {"name":"baseline","chapter":3,"menu":true,"initializationMs":1598.9,"rebuildMedianMs":1523.2,"frameMedianMs":2.4,"frameP95Ms":5.5,"frameMaxMs":58.8,"physicsP95Ms":0.3,"eventsP95Ms":0.1,"drawP95Ms":4.6,"drawCalls":120,"peakRings":240,"peakEvents":321,"blocksBroken":289,"combo":1060},
+    {"name":"optimized","chapter":3,"menu":false,"initializationMs":284.4,"rebuildMedianMs":245.8,"frameMedianMs":2.3,"frameP95Ms":4.1,"frameMaxMs":62.9,"physicsP95Ms":0.2,"eventsP95Ms":0.3,"drawP95Ms":3.9,"drawCalls":120,"peakRings":160,"peakEvents":321,"blocksBroken":289,"combo":1060},
+    {"name":"optimized","chapter":5,"menu":false,"initializationMs":262.7,"rebuildMedianMs":185.5,"frameMedianMs":4.4,"frameP95Ms":7.4,"frameMaxMs":73.4,"physicsP95Ms":0.5,"eventsP95Ms":0.8,"drawP95Ms":6.7,"drawCalls":120,"peakRings":160,"peakEvents":345,"blocksBroken":202,"combo":619},
+    {"name":"optimized","chapter":3,"menu":true,"initializationMs":313.3,"rebuildMedianMs":240.5,"frameMedianMs":0,"frameP95Ms":2.2,"frameMaxMs":23.9,"physicsP95Ms":0.2,"eventsP95Ms":0.2,"drawP95Ms":2.4,"drawCalls":30,"peakRings":40,"peakEvents":321,"blocksBroken":289,"combo":1060}
+  ],
+  "errors": [],
+  "reproduce": "Run Vite and open /scripts/render-performance-check.html for current-only cases. Optional ?compare expects a temporary scripts/render-baseline.tmp.js copied from the named git revision's src/renderer.js, with relative ./ imports changed to ../src/. The temporary historical source is not shipped. The HTML yields through rAF with a timer fallback, so a hidden diagnostic tab does not stall."
+}

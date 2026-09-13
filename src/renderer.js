@@ -1,7 +1,8 @@
-import { Application, Container, Graphics, Sprite, Text, BitmapFont, BitmapText, Texture, ParticleContainer, Particle, Rectangle } from 'pixi.js';
+import { Application, Container, Graphics, Sprite, Text, BitmapFont, BitmapText, Texture, ParticleContainer, Particle, Rectangle, FillGradient } from 'pixi.js';
 import { createComboFilter, comboEffectStrength } from './combo-filter.js';
 import { GameAudio } from './audio.js';
 import audioConfig from './data/audio.json' with { type: 'json' };
+import presentation from './data/presentation.json' with { type: 'json' };
 
 export class Renderer {
   constructor(game, host, onAction) {
@@ -107,11 +108,11 @@ export class Renderer {
     return b.type === 'elite' ? 0x32334d : b.type === 'gold' ? 0xf0cc68 : b.type === 'core' ? 0x23283e : b.type === 'bomb' ? 0xeb785e : palette[Math.min(palette.length - 1, tier)];
   }
   rebuild() {
-    this.blockLayer.removeChildren().forEach(v => v.destroy({ children: true }));
+    this.blockLayer.removeChildren().forEach(v => v.destroy({ children: true, context: true }));
     this.blockViews.clear();
     this.rings.length = 0;
     this.bossTime = 0; this.bossBackdrop.clear();
-    this.floaters.forEach(f => f.node.destroy({ children: true })); this.floaters = [];
+    this.floaters.forEach(f => f.node.destroy({ children: true, context: true })); this.floaters = [];
     this.trails = new WeakMap();
     this.mechanismSeen.clear();
     this.comboTexts.forEach(f => f.node.destroy()); this.comboTexts = [];
@@ -123,10 +124,11 @@ export class Renderer {
     const boss = this.game.boss;
     if (boss?.phase === 'defeated' && this.game.bossVictoryLeft > 0) {
       const max = this.game.data.boss?.victoryDuration || 1.4;
-      this.rings.push({ x: boss.x + 16, y: boss.y + 16, size: boss.size, rotation: boss.rotation,
+      this.addRing({ x: boss.x + 16, y: boss.y + 16, size: boss.size, rotation: boss.rotation,
         life: Math.min(max, this.game.bossVictoryLeft), max, palette: [...this.game.chapter.palette], bossEffect: 'defeat' });
     }
     this.warmCombo();
+    this.renderedRun = this.game.run;
   }
   addBlock(b) {
     const container = new Container(); container.position.set(b.x + 16, b.y + 16);
@@ -136,10 +138,18 @@ export class Renderer {
       this.blockViews.set(b.id, view); this.updateBossBody(view); return;
     }
     const side = this.game.data.physics.size / this.game.data.physics.grid * this.game.data.physics.blockSize;
-    const square = new Sprite(Texture.WHITE); square.anchor.set(0.5); square.width = square.height = side; square.tint = this.color(b); container.addChild(square);
+    let square;
+    if (b.type === 'elite') {
+      this.eliteFill ||= new FillGradient({ start: { x: 0, y: 0 }, end: { x: 1, y: 1 }, colorStops: presentation.eliteColors.map((color, i) => ({ color, offset: i / (presentation.eliteColors.length - 1) })) });
+      square = new Graphics().rect(-side / 2, -side / 2, side, side).fill(this.eliteFill);
+    } else {
+      square = new Sprite(Texture.WHITE); square.anchor.set(0.5); square.width = square.height = side; square.tint = this.color(b);
+    }
+    container.addChild(square);
     const hole = new Sprite(Texture.WHITE); hole.anchor.set(0.5); hole.tint = 0xffffff; container.addChild(hole);
-    const label = new Text({ text: this.label(b), resolution: this.textResolution, style: { fontFamily: 'Consolas, monospace', fontSize: 16, fontWeight: '600', trim: true, fill: b.type === 'elite' ? 0xffdf89 : b.type === 'gold' ? 0x775120 : 0xffffff } });
-    label.anchor.set(0.5); container.addChild(label);
+    // Empty Text objects still generate and trim canvases in Pixi. Ordinary ore needs none.
+    const text = this.label(b), label = text ? new Text({ text, resolution: this.textResolution, style: { fontFamily: 'Consolas, monospace', fontSize: 16, fontWeight: '600', trim: true, fill: b.type === 'elite' ? 0x25263d : b.type === 'gold' ? 0x775120 : 0xffffff } }) : null;
+    if (label) { label.anchor.set(0.5); container.addChild(label); }
     this.blockLayer.addChild(container);
     const view = { container, square, hole, label, punch: 0, block: b };
     this.blockViews.set(b.id, view); this.updateHole(view);
@@ -153,7 +163,7 @@ export class Renderer {
     const p = this.game.data.physics;
     view.hole.width = view.hole.height = p.size / p.grid * Math.min(p.holeSize, p.blockSize) * ratio;
     view.hole.visible = ratio > 0;
-    view.label.style.fill = ratio > 0.15 ? this.color(view.block) : view.block.type === 'elite' ? 0xffdf89 : view.block.type === 'gold' ? 0x775120 : 0xffffff;
+    if (view.label) view.label.style.fill = view.block.type === 'elite' ? 0x25263d : ratio > 0.15 ? this.color(view.block) : view.block.type === 'gold' ? 0x775120 : 0xffffff;
   }
   bossDamagePhase(b) {
     return (this.game.data.boss?.visual?.phaseThresholds || [.66, .33]).filter(hp => b.hp / b.maxHP <= hp).length;
@@ -277,29 +287,31 @@ export class Renderer {
     }
   }
   events(events) {
+    this.frameRings = new Map();
     this.audio.update(this.game, { hidden: document.hidden, paused: this.game.paused || this.menuOpen });
     this.audio.events(events, this.game);
     for (const e of events) {
-      if (e.type === 'newrun') this.rebuild();
+      // init/import/preview already drew this run; only a genuinely new map needs rebuilding.
+      if (e.type === 'newrun' && this.renderedRun !== this.game.run) this.rebuild();
       if (e.type === 'launch') {
         const [min, max] = this.game.data.effects.comboFX.angleRange;
         this.comboFilter.resources.spectrum.uniforms.uAngle = (min + Math.random() * (max - min)) * Math.PI / 180;
       }
       if (e.type === 'tech') {
         this.showMechanism(e.id,e.x,e.y);
-        if(e.id==='fracture') this.rings.push({x:e.x,y:e.y,life:.55,max:.55,fracture:true});
+        if(e.id==='fracture') this.addRing({x:e.x,y:e.y,life:.55,max:.55,fracture:true});
       }
       if (e.type === 'upgrade') for (const v of this.blockViews.values()) if (v.label) v.label.text = this.label(v.block);
       if (e.type === 'bossphase' || e.type === 'bossdefeat') {
         const defeated = e.type === 'bossdefeat', life = defeated ? (e.duration || this.game.data.boss?.victoryDuration || 1.4) : .8;
-        this.rings.push({ ...e, life, max: life, palette: [...this.game.chapter.palette], bossEffect: defeated ? 'defeat' : 'active' });
+        this.addRing({ ...e, life, max: life, palette: [...this.game.chapter.palette], bossEffect: defeated ? 'defeat' : 'active' });
         
         if (defeated) {
-          const view = this.blockViews.get(e.id); view?.container.destroy({ children: true }); this.blockViews.delete(e.id);
+          const view = this.blockViews.get(e.id); view?.container.destroy({ children: true, context: true }); this.blockViews.delete(e.id);
         }
       }
       if (e.type === 'bosschip' && this.rings.filter(r=>r.bossChip).length < 10) {
-        this.rings.push({...e,life:.32,max:.32,bossChip:true});
+        this.addRing({...e,life:.32,max:.32,bossChip:true});
       }
       if (e.type === 'hit') {
         const v = this.blockViews.get(e.id);
@@ -307,82 +319,99 @@ export class Renderer {
           v.impact = .2;
           if (!v.pendingHit || (v.pendingHit.area && !e.area) || (v.pendingHit.area === e.area && e.damage > v.pendingHit.damage)) v.pendingHit = e;
         }
-        else if (v) { v.punch = this.game.data.effects.punchDuration; v.px = e.dx; v.py = e.dy; v.label.text = this.label(v.block); }
+        else if (v) { v.punch = this.game.data.effects.punchDuration; v.px = e.dx; v.py = e.dy; }
         if (!e.area) { this.burst(e.x, e.y, this.game.chapter.color, 3, 0.25);  }
       }
       if (e.type === 'break') {
         const v = this.blockViews.get(e.id);
         const boss = v?.boss || this.game.boss?.id === e.id;
-        const tint = v?.square?.tint || this.game.chapter.color;
-        if (v) { v.container.destroy({ children: true }); this.blockViews.delete(e.id); }
+        const tint = v?.block.type === 'elite' ? 0xe6bc56 : v?.square?.tint || this.game.chapter.color;
+        if (v) { v.container.destroy({ children: true, context: true }); this.blockViews.delete(e.id); }
         if (!boss) this.burst(e.x, e.y, tint, this.game.data.effects.burst, 0.6);
         if (e.comboAdded > 0 && e.combo >= 3) this.showCombo(e);
         if (!boss) { this.shake = Math.max(this.shake || 0, 1.8 + Math.min(e.combo / 10, 3)); }
       }
       if (e.type === 'dividend') this.showDividend(e);
       if (e.type === 'eliteopen') {
-        this.rings.push({ ...e, life: 1.4, max: 1.4, elite: true });
+        this.addRing({ ...e, life: 1.4, max: 1.4, elite: true });
         this.burst(e.x,e.y,0xe6bc56,70,1.35); 
       }
       if (e.type === 'arc') {
-        this.rings.push({ ...e, life: .65, max: .65, arc: true });
+        this.addRing({ ...e, life: .65, max: .65, arc: true });
         for (const p of e.points.slice(1)) this.burst(p.x,p.y,0x578bd4,5,.55);
         
       }
-      if (e.type === 'riftopen' || e.type === 'riftpulse') this.rings.push({ ...e, life: .8, max: .8, rift: true });
+      if (e.type === 'riftopen' || e.type === 'riftpulse') this.addRing({ ...e, life: .8, max: .8, rift: true });
       if (e.type === 'riftcollapse') {
-        this.rings.push({ ...e, life: 1, max: 1, riftCollapse: true });
+        this.addRing({ ...e, life: 1, max: 1, riftCollapse: true });
         this.burst(e.x,e.y,0x8660bb,50,.9); 
       }
       if (e.type === 'finale') {
-        this.rings.push({ ...e, life: 1.2, max: 1.2, finale: true });
+        this.addRing({ ...e, life: 1.2, max: 1.2, finale: true });
         
       }
-      if (e.type === 'spawn') { const b = this.game.grid.get(e.id); if (b) { const old = this.blockViews.get(e.id); old?.container.destroy({ children: true }); this.addBlock(b); } this.burst(e.x, e.y, 0xf4cd6a, 12, 0.7); }
+      if (e.type === 'spawn') { const b = this.game.grid.get(e.id); if (b) { const old = this.blockViews.get(e.id); old?.container.destroy({ children: true, context: true }); this.addBlock(b); } this.burst(e.x, e.y, 0xf4cd6a, 12, 0.7); }
       if (e.type === 'drop') {
         const d = this.game.data.drops.find(d => d.id === e.id);
         this.showDrop(e, d);
-        this.rings.push({ x: e.x, y: e.y, life: 0.8, max: 0.8, radius: 43, color: d.color });
+        this.addRing({ x: e.x, y: e.y, life: 0.8, max: 0.8, radius: 43, color: d.color });
         
       }
       if (['shock', 'core', 'portal', 'launch', 'split'].includes(e.type)) {
         const color = e.type === 'shock' ? e.tech==='comboBurst' ? 0xd6ad48 : e.tech==='splitShock' ? 0xac62cf : 0xf28463 : e.type === 'portal' || e.type === 'split' ? 0x9071e6 : 0x6d9ef5;
         const life = e.type === 'shock' ? 0.65 : e.type === 'core' ? 1.15 : 0.55;
-        this.rings.push({ x: e.x, y: e.y, life, max: life, radius: e.radius || (e.type === 'core' ? 140 : 35), color, shock: e.type === 'shock', splitShock:e.tech==='splitShock', square: e.type === 'core' || e.bomb });
+        this.addRing({ x: e.x, y: e.y, life, max: life, radius: e.radius || (e.type === 'core' ? 140 : 35), color, shock: e.type === 'shock', splitShock:e.tech==='splitShock', square: e.type === 'core' || e.bomb });
         if (e.type === 'core' || e.bomb) { this.burst(e.x, e.y, color, 70, 1.1); this.shake = 8;  }
       }
-      if (e.type === 'beam') { this.rings.push({ ...e, life: 0.5, max: 0.5, beam: true }); this.burst(e.x, e.y, 0x72ded1, 100, 1); this.shake = 10;  }
-      if (e.type === 'pierce') { this.rings.push({ ...e, life: 0.35, max: 0.35, pierce: true }); this.burst(e.x, e.y, 0x569ee3, 8, 0.4); }
-      if (e.type === 'magnet') this.rings.push({ ...e, life: 0.5, max: 0.5, magnet: true });
-      if (e.type === 'tether') { const life=e.split ? .7 : .4;this.rings.push({ ...e, life,max:life,tether:true });  }
+      if (e.type === 'beam') { this.addRing({ ...e, life: 0.5, max: 0.5, beam: true }); this.burst(e.x, e.y, 0x72ded1, 100, 1); this.shake = 10;  }
+      if (e.type === 'pierce') { this.addRing({ ...e, life: 0.35, max: 0.35, pierce: true }); this.burst(e.x, e.y, 0x569ee3, 8, 0.4); }
+      if (e.type === 'magnet') this.addRing({ ...e, life: 0.5, max: 0.5, magnet: true });
+      if (e.type === 'tether') { const life=e.split ? .7 : .4;this.addRing({ ...e, life,max:life,tether:true });  }
       if (['bumper','bumpergrow','returnend','awaken'].includes(e.type)) {
         const color = e.type==='bumper' || e.type==='bumpergrow' ? 0xd8b747 : 0x8975ce;
-        this.rings.push({ ...e, life:.65,max:.65,radius:e.type==='awaken'?160:35,color });
+        this.addRing({ ...e, life:.65,max:.65,radius:e.type==='awaken'?160:35,color });
         this.burst(e.x,e.y,color,e.type==='awaken'?90:14,.7); 
-        if(e.type==='bumper' && e.split && e.actualEnergy>0) this.rings.push({...e,life:.7,max:.7,springBoost:true});
+        if(e.type==='bumper' && e.split && e.actualEnergy>0) this.addRing({...e,life:.7,max:.7,springBoost:true});
       }
-      if (e.type === 'return') { this.rings.push({...e,life:.9,max:.9,radius:32,color:0x8877d4,returnPath:e.split});  }
-      if(e.type==='starpoint' || e.type==='starconduct') { this.rings.push({...e,life:.6,max:.6,radius:21,color:0x50b9ca}); this.burst(e.x,e.y,0x77cbd3,8,.55);  }
+      if (e.type === 'return') { this.addRing({...e,life:.9,max:.9,radius:32,color:0x8877d4,returnPath:e.split});  }
+      if(e.type==='starpoint' || e.type==='starconduct') { this.addRing({...e,life:.6,max:.6,radius:21,color:0x50b9ca}); this.burst(e.x,e.y,0x77cbd3,8,.55);  }
       if(e.type==='starfeed') {
         const color=e.kind==='starSplit'?0xac62cf:e.kind==='starBumper'?0xd4a424:e.kind==='starReturn'?0x7b60c3:0x328fb5;
         const recent=this.rings.find(r=>r.feed && r.kind===e.kind && r.life>.46);
         if(recent) recent.amount=Math.min(10,recent.amount+e.amount);
-        else this.rings.push({...e,color,life:.62,max:.62,feed:true});
+        else this.addRing({...e,color,life:.62,max:.62,feed:true});
       }
-      if(e.type==='starsalvohit') { const color=e.tech==='finaleSalvo'?0xd4a747:0x337ed4;this.rings.push({...e,life:.55,max:.55,radius:32,color});this.burst(e.x,e.y,color,e.killed?24:9,.65); }
+      if(e.type==='starsalvohit') { const color=e.tech==='finaleSalvo'?0xd4a747:0x337ed4;this.addRing({...e,life:.55,max:.55,radius:32,color});this.burst(e.x,e.y,color,e.killed?24:9,.65); }
       if(['starformed','starwindup','starcollapse','starrefract'].includes(e.type)) {
         const life=e.type==='starcollapse'?1.5:e.type==='starwindup'?this.game.data.constellation.windup:.85;
-        this.rings.push({...e,life,max:life,starEffect:e.type});
+        this.addRing({...e,life,max:life,starEffect:e.type});
         if(e.type==='starcollapse') { this.burst(e.x,e.y,0x75cdd3,120,1.15); this.shake=10; this.float(e.x,e.y,`星阵 · ${e.kills ? e.kills+'击破' : (e.hits||0)+'命中'}`,0x328fb5,17,1.6); }
       }
-      if (e.type === 'wall') this.rings.push({ ...e, life: 0.3, max: 0.3, radius: 18, color: this.game.chapter.color });
+      if (e.type === 'wall') this.addRing({ ...e, life: 0.3, max: 0.3, radius: 18, color: this.game.chapter.color });
     }
     // A screen-filling chain can exceed the cosmetic event budget. Always reconcile its final geometry.
-    if (events.length) for (const [id, v] of this.blockViews) if (this.game.grid.get(id) !== v.block) { v.container.destroy({ children: true }); this.blockViews.delete(id); }
+    if (events.length) for (const [id, v] of this.blockViews) if (this.game.grid.get(id) !== v.block) { v.container.destroy({ children: true, context: true }); this.blockViews.delete(id); }
     if (events.length) for (const b of this.game.grid.values()) if (!this.blockViews.has(b.id)) this.addBlock(b);
+  }
+  addRing(ring) {
+    // Merge coincident cosmetic bursts only. Damage and rewards are already resolved by Game.
+    const key = `${ring.type || Object.keys(ring).filter(k => ring[k] === true).join(':')}:${Math.round((ring.x || 0) / 12)}:${Math.round((ring.y || 0) / 12)}:${ring.tx || 0}:${ring.ty || 0}:${ring.color || ''}:${ring.starEffect || ''}:${ring.bossEffect || ''}`;
+    const recent = this.frameRings?.get(key);
+    if (recent && !ring.bossEffect && !ring.starEffect && !ring.elite) {
+      recent.radius = Math.max(recent.radius || 0, ring.radius || 0);
+      return;
+    }
+    this.frameRings?.set(key, ring);
+    const limit = this.menuOpen ? presentation.menuRingLimit : presentation.ringLimit;
+    while (this.rings.length >= limit) {
+      const index = this.rings.findIndex(r => !r.bossEffect && !r.starEffect && !r.elite && !r.finale);
+      this.rings.splice(Math.max(0, index), 1);
+    }
+    this.rings.push(ring);
   }
   burst(x, y, color, count, life) {
     if (!this.game.profile.settings.particles) return;
+    if (this.menuOpen) count = Math.ceil(count / 4);
     for (let i = 0; i < count; i++) {
       const item = this.particles[this.cursor = ((this.cursor || 0) + 1) % this.particles.length];
       const a = Math.random() * Math.PI * 2, speed = 40 + Math.random() * 160;
@@ -391,13 +420,14 @@ export class Renderer {
     }
   }
   float(x, y, text, color, size, life = 0.7) {
-    if (this.floaters.length >= 35) return;
+    if (this.menuOpen || this.floaters.length >= 35) return;
     const node = new Text({ text, resolution: this.textResolution, style: { fontFamily: 'Inter, Microsoft YaHei, sans-serif', fontSize: size, fontWeight: '600', fill: color, stroke: { color: 0xffffff, width: 3 } } });
     node.anchor.set(0.5); node.position.set(Math.max(70, Math.min(538, x)), y); this.textLayer.addChild(node);
     const floater={ node, life, max: life };this.floaters.push(floater);return floater;
   }
   get gentleEffects() { return this.game.profile.settings.reducedEffects || this.reducedMotion.matches; }
   showCombo(e) {
+    if (this.menuOpen) return;
     const config = this.game.data.effects.comboFX;
     if (this.comboTexts.length >= config.textMax) this.comboTexts.shift().node.destroy();
     const tier = e.combo < config.startCombo ? 0 : Math.min(5, 1 + Math.floor(Math.log2(e.combo / config.startCombo)));
@@ -408,7 +438,7 @@ export class Renderer {
     this.comboTexts.push({ node, x:node.x, y:node.y, life:config.textLife, max:config.textLife, tier });
   }
   showDividend(e) {
-    if (!e.coins) return;
+    if (!e.coins || this.menuOpen) return;
     let notice = this.floaters.find(f => f.dividend);
     if (notice) { notice.coins += e.coins; notice.life = notice.max; notice.node.text = `连击铸币 +${this.moneyFormat.format(notice.coins)}`; }
     else {
@@ -416,6 +446,7 @@ export class Renderer {
       if (notice) { notice.dividend = true; notice.coins = e.coins; }
     }
     this.burst(e.x,e.y,0xdcba60,7,.65);
+    if (this.menuOpen) return;
     if (this.time - (this.lastCashFlight || -1) < .16) return;
     this.lastCashFlight = this.time;
     const wallet = document.getElementById('wallet'), arena = this.app.canvas.getBoundingClientRect();
@@ -476,11 +507,12 @@ export class Renderer {
     if(notice) { notice.mechanism=true;this.mechanismSeen.add(id); }
   }
   showDrop(e, d) {
-    if (!d) return;
+    // Covered by the menu: keep the actual drop and HUD update, skip new text textures.
+    if (!d || this.menuOpen) return;
     const life = d.elite ? this.game.data.effects.eliteDropDuration : this.game.data.effects.dropDuration, existing = this.floaters.find(f => f.id === d.id && f.life > life - 1);
     if (existing) { existing.life = life; existing.count++; existing.caption.text = `${d.name} ×${existing.count}`; return; }
     const drops=this.floaters.filter(f=>f.id);
-    if (drops.length >= 7) { const old=drops.find(f=>!f.elite)||drops[0]; this.floaters.splice(this.floaters.indexOf(old),1); old.node.destroy({ children: true }); }
+    if (drops.length >= 7) { const old=drops.find(f=>!f.elite)||drops[0]; this.floaters.splice(this.floaters.indexOf(old),1); old.node.destroy({ children: true, context: true }); }
     const node = new Container(), bg = new Graphics();
     bg.circle(0,0,28).fill({ color: 0xffffff, alpha: this.game.data.effects.dropBackgroundAlpha }).stroke({ color: d.color, width: 1.4, alpha:0.55 }); node.addChild(bg);
     if(d.elite) bg.poly([0,-37,37,0,0,37,-37,0]).stroke({color:0xc8a257,width:2,alpha:.9}).circle(0,0,32).stroke({color:d.color,width:1,alpha:.5});
@@ -539,7 +571,7 @@ export class Renderer {
         this.updateBossBody(v, bossDt);
         const phase = this.bossDamagePhase(v.block);
         if (phase > v.damagePhase && v.block.alive && v.block.phase === 'active') {
-          this.rings.push({ x: v.container.x, y: v.container.y, size: v.block.size, rotation: v.block.rotation, life: .9, max: .9, bossEffect: 'damage' });
+          this.addRing({ x: v.container.x, y: v.container.y, size: v.block.size, rotation: v.block.rotation, life: .9, max: .9, bossEffect: 'damage' });
           
         }
         v.damagePhase = phase; v.impact = Math.max(0, (v.impact || 0) - bossDt);
@@ -551,7 +583,7 @@ export class Renderer {
       const t = 1 - v.punch / game.data.effects.punchDuration;
       const punch = v.punch > 0 ? Math.sin(t * Math.PI * 2) * (1 - t) * game.data.effects.punchDistance : 0;
       v.container.position.set(v.block.x + 16 + (v.px || 0) * punch, v.block.y + 16 + (v.py || 0) * punch);
-      v.square.tint = this.color(v.block); this.updateHole(v);
+      this.updateHole(v);
       if(v.block.type==='elite') {
         const x=v.container.x,y=v.container.y, glow=.72+(this.gentleEffects?0:Math.sin(this.time*1.3+v.block.id)*.15);
         under.rect(x-14.5,y-14.5,29,29).stroke({color:0xe2bf71,width:1.5,alpha:glow});
@@ -799,7 +831,7 @@ export class Renderer {
       } else g.circle(r.x, r.y, r.radius * (1 - alpha) + 3).stroke({ color: r.color, width: alpha * 4, alpha });
       return true;
     });
-    this.floaters = this.floaters.filter(f => { f.life -= dt; if (f.life <= 0) { f.node.destroy({ children: true }); return false; } f.node.y -= dt * (f.id ? 7 : 28); f.node.alpha = Math.min(1, f.life / 0.45); if(f.id) f.node.scale.set(f.scale*(1 + Math.max(0, 0.18-(f.max-f.life))*0.8)); return true; });
+    this.floaters = this.floaters.filter(f => { f.life -= dt; if (f.life <= 0) { f.node.destroy({ children: true, context: true }); return false; } f.node.y -= dt * (f.id ? 7 : 28); f.node.alpha = Math.min(1, f.life / 0.45); if(f.id) f.node.scale.set(f.scale*(1 + Math.max(0, 0.18-(f.max-f.life))*0.8)); return true; });
     this.comboTexts = this.comboTexts.filter(f => {
       f.life -= dt; if(f.life<=0) {f.node.destroy();return false;}
       const age=1-f.life/f.max;

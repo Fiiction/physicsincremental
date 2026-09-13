@@ -7,7 +7,8 @@ export function sanitizeProfile(raw, data) {
   if (!raw || raw.version !== 1) throw new Error('这份存档的版本无法识别');
   const p = createProfile();
   for (const key of ['coins', 'earned', 'stageKills', 'stageCores', 'stageCombo', 'bestCombo', 'bestRun', 'totalKills', 'runs', 'prestige']) {
-    if (typeof raw[key] === 'number' && Number.isFinite(raw[key])) p[key] = Math.max(0, Math.min(1e12, Math.floor(raw[key])));
+    const maximum=key==='coins'||key==='earned' ? Number.MAX_SAFE_INTEGER : 1e12;
+    if (typeof raw[key] === 'number' && Number.isFinite(raw[key])) p[key] = Math.max(0, Math.min(maximum, Math.floor(raw[key])));
   }
   p.chapter = Math.max(0, Math.min(data.chapters.length - 1, Math.floor(Number(raw.chapter) || 0)));
   p.unlockedChapter = Math.max(p.chapter, p.prestige ? Math.min(3, data.chapters.length - 1) : 0, Math.min(data.chapters.length - 1, Math.floor(Number(raw.unlockedChapter) || 0)));
@@ -249,15 +250,21 @@ export class Game {
     return Math.hypot(Math.max(0,Math.abs(dx*c+dy*s)-half),Math.max(0,Math.abs(-dx*s+dy*c)-half));
   }
   lineHitsBlock(from,to,block,padding=this.data.relicMechanics.lineRadius) {
-    const center={x:block.x+16,y:block.y+16},rotation=block.type==='boss'?block.rotation:0,c=Math.cos(rotation),s=Math.sin(rotation);
-    const local=point=>({x:(point.x-center.x)*c+(point.y-center.y)*s,y:-(point.x-center.x)*s+(point.y-center.y)*c});
-    const a=local(from),b=local(to),half=(block.type==='boss'?block.size:this.data.physics.size/this.data.physics.grid*this.data.physics.blockSize)/2+padding;
-    let enter=0,leave=1;
-    for(const axis of ['x','y']) {
-      const delta=b[axis]-a[axis];
-      if(Math.abs(delta)<1e-8) {if(Math.abs(a[axis])>half)return false;}
-      else {const lo=(-half-a[axis])/delta,hi=(half-a[axis])/delta;enter=Math.max(enter,Math.min(lo,hi));leave=Math.min(leave,Math.max(lo,hi));}
+    const centerX=block.x+16,centerY=block.y+16;
+    let ax=from.x-centerX,ay=from.y-centerY,bx=to.x-centerX,by=to.y-centerY;
+    if(block.type==='boss') {
+      const c=Math.cos(block.rotation),s=Math.sin(block.rotation);
+      const x1=ax*c+ay*s,x2=bx*c+by*s;
+      ay=-ax*s+ay*c;by=-bx*s+by*c;ax=x1;bx=x2;
     }
+    const half=(block.type==='boss'?block.size:this.data.physics.size/this.data.physics.grid*this.data.physics.blockSize)/2+padding;
+    let enter=0,leave=1;
+    const dx=bx-ax,dy=by-ay;
+    if(Math.abs(dx)<1e-8) {if(Math.abs(ax)>half)return false;}
+    else {const lo=(-half-ax)/dx,hi=(half-ax)/dx;enter=Math.max(enter,Math.min(lo,hi));leave=Math.min(leave,Math.max(lo,hi));}
+    if(enter>leave)return false;
+    if(Math.abs(dy)<1e-8) {if(Math.abs(ay)>half)return false;}
+    else {const lo=(-half-ay)/dy,hi=(half-ay)/dy;enter=Math.max(enter,Math.min(lo,hi));leave=Math.min(leave,Math.max(lo,hi));}
     return enter<=leave;
   }
   blockInStar(block,triangle=this.star.triangle) {
@@ -327,7 +334,7 @@ export class Game {
     if(this.run.bossSpawned&&!this.run.bossDefeated)this.run.bossShots++;
     this.combo = 0;
     this.mintClaimed = this.burstClaimed = this.finaleClaimed = 0;
-    this.arcSplits = 0; this.rifts = [];
+    this.arcSplits = 0; this.rifts = []; this.effectTailElapsed = 0;
     this.hits = 0;
     this.nextBeam = this.beamEvery;
     this.beamAt = 0;
@@ -663,7 +670,7 @@ export class Game {
     let origin=points[0];
     ball.arcAt=this.shotTime+m.arcCooldown;
     for(let i=0;i<m.arcTargets;i++) {
-      const target=this.blocks.filter(b=>b.alive&&b.type!=='boss'&&!seen.has(b.id)&&this.blockDistance(b,origin.x,origin.y)<=m.arcRange).sort((a,b)=>this.blockDistance(a,origin.x,origin.y)-this.blockDistance(b,origin.x,origin.y))[0];
+      const target=this.nearestTarget(origin.x,origin.y,seen,m.arcRange);
       if(!target) break;
       seen.add(target.id);
       const point={x:target.x+16,y:target.y+16}; points.push(point);
@@ -695,10 +702,13 @@ export class Game {
     if(tech) this.triggerTech(tech,{x,y,radius:rift.radius});
     return rift;
   }
-  updateRifts(dt) {
+  updateRifts(dt, settling=false) {
     for(const rift of this.rifts) {
-      rift.left-=dt; rift.pulse-=dt;
-      while(rift.pulse<=1e-8 && rift.left>=-1e-8) {
+      // An empty field cannot receive new physical targets after all balls land.
+      if(settling && !this.nearestTarget(rift.x,rift.y,null,rift.radius)) {rift.left=0;continue;}
+      const elapsed=Math.min(dt,Math.max(0,rift.left));
+      rift.left=Math.max(0,rift.left-elapsed); rift.pulse-=elapsed;
+      while(rift.pulse<=1e-8) {
         rift.pulse+=this.data.elite.riftInterval;
         const source={x:rift.x,y:rift.y,dx:0,dy:0,main:true,energy:0,initialEnergy:0,synthetic:true,starBorn:true};
         const before=this.run.kills; let targets=0;
@@ -783,11 +793,11 @@ export class Game {
         const progress=Math.max(0,Math.min(1,1-bolt.left/bolt.duration));
         const x=bolt.x+(bolt.tx-bolt.x)*progress,y=bolt.y+(bolt.ty-bolt.y)*progress;
         const reserved=new Set(this.star.volley.filter(b=>b!==bolt).map(b=>b.targetId));
-        const target=this.blocks.filter(b=>b.alive&&b.type!=='boss'&&!reserved.has(b.id)).sort((a,b)=>Math.hypot(a.x+16-x,a.y+16-y)-Math.hypot(b.x+16-x,b.y+16-y))[0];
+        const target=this.nearestTarget(x,y,reserved);
         if(target) {
           bolt.x=x; bolt.y=y; bolt.tx=target.x+16; bolt.ty=target.y+16; bolt.targetId=target.id; bolt.duration=bolt.left;
           bolt.damage=bolt.baseDamage+this.percentDamage(target,bolt.hpDamage);
-        }
+        } else { bolt.left=0; continue; }
       }
       bolt.left-=dt; if(bolt.left<=0) arrived.push(bolt);
     }
@@ -830,17 +840,28 @@ export class Game {
     const duration=this.data.constellation.salvoDuration;
     if(!origins.length || !(this.shotTime+duration<=this.data.physics.maxShotTime+this.data.relicMechanics.returnMaxTime)) return 0;
     const reserved=new Set(this.star.volley.map(b=>b.targetId));
-    const targets=this.blocks.filter(b=>b.alive&&b.type!=='boss'&&!reserved.has(b.id));
     const capacity=Math.max(0,(this.data.constellation.maxProjectiles??24)-this.star.volley.length);
     let projectiles=0;
-    for(let i=0;i<Math.min(count,capacity)&&targets.length;i++) {
+    for(let i=0;i<Math.min(count,capacity);i++) {
       const p=origins[i%origins.length];
-      targets.sort((a,b)=>Math.hypot(a.x+16-p.x,a.y+16-p.y)-Math.hypot(b.x+16-p.x,b.y+16-p.y));
-      const target=targets.shift();
+      const target=this.nearestTarget(p.x,p.y,reserved);
+      if(!target) break;
+      reserved.add(target.id);
       const bolt={x:p.x,y:p.y,tx:target.x+16,ty:target.y+16,targetId:target.id,left:duration,duration,baseDamage,hpDamage,damage:baseDamage+this.percentDamage(target,hpDamage),tech};
       this.star.volley.push(bolt); this.emit('starsalvo',{...bolt}); projectiles++;
     }
     return projectiles;
+  }
+  nearestTarget(x,y,reserved,range=Infinity) {
+    let closest=null,best=range*range;
+    // The arena already has an index of live blocks. One linear minimum avoids
+    // repeatedly sorting the whole map for each lightning jump and salvo bolt.
+    for(const block of this.grid.values()) {
+      if(!block.alive||block.type==='boss'||reserved?.has(block.id)) continue;
+      const dx=block.x+16-x,dy=block.y+16-y,distance=dx*dx+dy*dy;
+      if(distance<best || (!closest&&distance<=best)) {closest=block;best=distance;}
+    }
+    return closest;
   }
   refractStar(x,y,ball) {
     if(!this.level.starPrism || !this.star.triangle || this.refracting || (!this.crossesStar({x:0,y},{x:this.data.physics.size,y})&&!this.crossesStar({x,y:0},{x,y:this.data.physics.size}))) return;
@@ -1008,9 +1029,22 @@ export class Game {
     if(this.bossVictoryLeft>0) return;
     for (const ball of this.balls) if (ball.energy <= 0 && this.canReturn(ball)) this.beginReturn(ball);
     this.balls = this.balls.filter(b => b.energy > 0);
-    this.updateStar(dt);
+    const settling=!this.balls.length;
+    let effectDt=dt;
+    if(settling) {
+      // Keep every remaining pulse and the final collapse, but present the
+      // stationary attack tail inside one short interval before the next shot.
+      const star=this.star,m=this.data.constellation;
+      const starFollowup=Math.max(this.level.starSalvo?m.salvoDuration:0,this.level.starRift?this.data.elite.riftDuration:0);
+      const starLeft=star.pending>0 ? star.pending+starFollowup : star.triangle&&star.casts<this.starCastLimit ? star.cooldown+m.windup+starFollowup : 0;
+      const remaining=Math.max(starLeft,...star.volley.map(b=>b.left),...this.rifts.map(r=>r.left));
+      const budget=Math.max(dt,(physics.effectTailTime??0.6)-(this.effectTailElapsed||0));
+      effectDt=dt*Math.max(1,(remaining+dt)/budget);
+      this.effectTailElapsed=(this.effectTailElapsed||0)+dt;
+    }
+    this.updateStar(effectDt);
     if(this.bossVictoryLeft>0) return;
-    this.updateRifts(dt);
+    this.updateRifts(effectDt,settling);
     if(this.bossVictoryLeft>0 || this.spawnBoss()) return;
     if ((!this.balls.length && !this.star.pending && !this.star.volley.length && !this.rifts.length) || this.shotTime >= physics.maxShotTime + this.data.relicMechanics.returnMaxTime || (!this.grid.size && !this.balls.some(b=>b.returning) && !this.star.pending && !this.star.volley.length)) this.finishShot();
   }
@@ -1106,7 +1140,7 @@ export class Game {
     return result;
   }
   snapshot() {
-    return JSON.parse(JSON.stringify({ seed: this.seed, tierCount:this.data.tierHP.length, bossVictoryLeft:this.bossVictoryLeft, blocks: this.blocks, portals: this.portals, pattern: this.pattern, bumpers: this.bumpers, star:this.star,rifts:this.rifts,arcSplits:this.arcSplits,mintClaimed:this.mintClaimed,burstClaimed:this.burstClaimed,finaleClaimed:this.finaleClaimed,returnedSplits:this.returnedSplits,tetherSplits:this.tetherSplits, launchOrigin: this.launchOrigin, position: this.position, state: this.state, shots: this.shots, buffs: this.buffs, activeBuffs: this.activeBuffs, run: this.run, balls: this.balls, combo: this.combo, hits: this.hits, nextBeam: this.nextBeam, beamAt:this.beamAt,beamArcAt:this.beamArcAt, shotAuto: this.shotAuto, shotTime: this.shotTime, fraction: this.fraction, accumulator: this.accumulator || 0, auto: this.auto, paused: this.paused, idleTime: this.idleTime, logs: this.logs, logSeq: this.logSeq }));
+    return JSON.parse(JSON.stringify({ seed: this.seed, tierCount:this.data.tierHP.length, bossVictoryLeft:this.bossVictoryLeft, blocks: this.blocks, portals: this.portals, pattern: this.pattern, bumpers: this.bumpers, star:this.star,rifts:this.rifts,arcSplits:this.arcSplits,mintClaimed:this.mintClaimed,burstClaimed:this.burstClaimed,finaleClaimed:this.finaleClaimed,returnedSplits:this.returnedSplits,tetherSplits:this.tetherSplits, launchOrigin: this.launchOrigin, position: this.position, state: this.state, shots: this.shots, buffs: this.buffs, activeBuffs: this.activeBuffs, run: this.run, balls: this.balls, combo: this.combo, hits: this.hits, nextBeam: this.nextBeam, beamAt:this.beamAt,beamArcAt:this.beamArcAt, shotAuto: this.shotAuto, shotTime: this.shotTime, effectTailElapsed:this.effectTailElapsed||0, fraction: this.fraction, accumulator: this.accumulator || 0, auto: this.auto, paused: this.paused, idleTime: this.idleTime, logs: this.logs, logSeq: this.logSeq }));
   }
   restore(saved) {
     const maxBlocks=this.data.physics.grid**2+1;
@@ -1123,12 +1157,13 @@ export class Game {
     if(saved.star && (!Array.isArray(saved.star.points)||saved.star.points.length>3||!saved.star.points.every(p=>p&&finite(p.x)&&finite(p.y))||(saved.star.triangle!==null&&(!Array.isArray(saved.star.triangle)||saved.star.triangle.length!==3||!saved.star.triangle.every(p=>p&&finite(p.x)&&finite(p.y))))||![saved.star.charge,saved.star.pending,saved.star.cooldown,saved.star.casts].every(finite))) return false;
     if(saved.star?.volley && (!Array.isArray(saved.star.volley)||saved.star.volley.length>(this.data.constellation.maxProjectiles??24)||saved.star.volley.some(b=>!b||![b.x,b.y,b.tx,b.ty,b.targetId,b.left,b.duration,b.damage].every(finite)||b.left<=0||b.duration<=0||b.left>b.duration||b.damage<0||['baseDamage','hpDamage'].some(key=>b[key]!==undefined&&(!finite(b[key])||b[key]<0))))) return false;
     if(['beamAt','beamArcAt'].some(key=>saved[key]!==undefined&&(!finite(saved[key])||saved[key]<0))) return false;
+    if(saved.effectTailElapsed!==undefined&&(!finite(saved.effectTailElapsed)||saved.effectTailElapsed<0||saved.effectTailElapsed>60)) return false;
     if(saved.rifts && (!Array.isArray(saved.rifts)||saved.rifts.length>this.data.elite.riftMax||saved.rifts.some(r=>!r||![r.x,r.y,r.left,r.duration,r.pulse,r.radius,r.damage,r.hpDamage].every(finite)||r.left<=0||r.duration<=0||r.left>r.duration||r.pulse<=0||r.radius<=0||r.damage<0||r.hpDamage<0))) return false;
     if(['arcSplits','mintClaimed','burstClaimed','finaleClaimed'].some(key=>saved[key]!==undefined&&(!finite(saved[key])||saved[key]<0))) return false;
     if (saved.portals && (!Array.isArray(saved.portals) || ![0, 2].includes(saved.portals.length) || saved.portals.some(p => !p || ![p.x,p.y].every(v => finite(v) && v >= 0 && v <= this.data.physics.size)))) return false;
     if (saved.pattern && ![saved.pattern.angle, saved.pattern.phase, saved.pattern.mirror].every(finite)) return false;
     if(saved.tierCount!==undefined && (!Number.isInteger(saved.tierCount)||saved.tierCount<2||saved.tierCount>64)) return false;
-    const keys = ['seed', 'blocks', 'portals', 'pattern', 'bumpers','star','rifts','arcSplits','mintClaimed','burstClaimed','finaleClaimed','returnedSplits','tetherSplits', 'launchOrigin', 'position', 'state', 'shots', 'buffs', 'activeBuffs', 'run', 'balls', 'combo', 'hits', 'nextBeam', 'beamAt','beamArcAt', 'shotAuto', 'shotTime', 'fraction', 'accumulator', 'idleTime', 'logs', 'logSeq'];
+    const keys = ['seed', 'blocks', 'portals', 'pattern', 'bumpers','star','rifts','arcSplits','mintClaimed','burstClaimed','finaleClaimed','returnedSplits','tetherSplits', 'launchOrigin', 'position', 'state', 'shots', 'buffs', 'activeBuffs', 'run', 'balls', 'combo', 'hits', 'nextBeam', 'beamAt','beamArcAt', 'shotAuto', 'shotTime', 'effectTailElapsed', 'fraction', 'accumulator', 'idleTime', 'logs', 'logSeq'];
     for (const key of keys) if (saved[key] !== undefined) this[key] = saved[key];
     const previousTiers=saved.tierCount||5;
     if(previousTiers!==this.data.tierHP.length) this.blocks=this.blocks.map(b=>({...b,tier:Math.max(0,Math.min(this.data.tierHP.length-1,Math.round((b.tier||0)/(previousTiers-1)*(this.data.tierHP.length-1))))}));
@@ -1155,6 +1190,7 @@ export class Game {
     delete this.star.comboCharged;
     this.beamAt = saved.beamAt ?? 0;
     this.beamArcAt = saved.beamArcAt ?? 0;
+    this.effectTailElapsed = saved.effectTailElapsed ?? 0;
     // Old snapshots had fixed portals; keep them aligned with their existing clearings.
     if (!saved.portals) this.portals = this.profile.chapter >= 2 ? [{ x:272, y:304 }, { x:464, y:208 }] : [];
     this.techEventTime=-1; this.techEvents={};

@@ -7,6 +7,7 @@ import * as idleModule from '../src/idle.js';
 // Actual page, scheduler, clock worker and physics with a controlled clock.
 // Renderer calls are observed, not drawn; real playback / GPU / throttling need browser QA.
 const data = JSON.parse(fs.readFileSync(new URL('../src/data/balance.json', import.meta.url), 'utf8'));
+const presentation = JSON.parse(fs.readFileSync(new URL('../src/data/presentation.json', import.meta.url), 'utf8'));
 const key = 'corebound.save.v1', startTime = 1_000_000;
 const source = name => fs.readFileSync(new URL(`../src/${name}`, import.meta.url), 'utf8')
   .replace(/^import .*;\r?$/gm, '').replace(/^export /gm, '').replaceAll('import.meta.url', JSON.stringify(new URL(`../src/${name}`, import.meta.url).href));
@@ -30,7 +31,7 @@ async function page(saved, { now = startTime, hidden = false, focused = true, wo
   let clock = now, nextTimer = 0, animationEnabled = !hidden;
   const timers = new Map(), animations = new Map(), elements = new Map(), workers = [], windowEvents = new Map(), documentEvents = new Map();
   const storage = new Map([[key, JSON.stringify(saved)]]), session = new Map([[key + '.background', '1']]);
-  const observation = { draws: 0, renders: 0, rebuilds: 0, seconds: 0, events: {}, audioUpdates: 0, frameObserver: null };
+  const observation = { draws: 0, renders: 0, rebuilds: 0, seconds: 0, ticks: 0, simulatedSeconds: 0, events: {}, audioUpdates: 0, tickObserver: null };
   const store = map => ({ getItem: k => map.get(k) ?? null, setItem: (k, v) => map.set(k, String(v)), removeItem: k => map.delete(k) });
   const timeout = (fn, delay = 0, interval = 0) => { const id = ++nextTimer; timers.set(id, { fn, at: clock + Math.max(.001, delay), interval }); return id; };
   const addEvent = (map, type, fn) => { const list = map.get(type) || []; list.push(fn); map.set(type, list); };
@@ -38,7 +39,13 @@ async function page(saved, { now = startTime, hidden = false, focused = true, wo
     Date: class extends Date { static now() { return clock; } }, performance: { now: () => clock },
     setTimeout: (fn, delay) => timeout(fn, delay), clearTimeout: id => timers.delete(id),
     setInterval: (fn, delay) => timeout(fn, delay, delay), clearInterval: id => timers.delete(id),
-    ...gameModule, ...idleModule, data };
+    ...gameModule, ...idleModule, data, presentation };
+  class PageGame extends Game {
+    tick(dt) {
+      observation.ticks++; observation.simulatedSeconds += dt;
+      super.tick(dt); observation.tickObserver?.(dt);
+    }
+  }
   class Worker {
     constructor(url) {
       if (!workerAvailable) throw new Error('Worker unavailable in this fixture');
@@ -59,14 +66,14 @@ async function page(saved, { now = startTime, hidden = false, focused = true, wo
     }
     async init() { return this; }
     rebuild() { observation.rebuilds++; }
-    render(dt) { observation.renders++; observation.seconds += dt; observation.frameObserver?.(dt); }
+    render(dt) { observation.renders++; observation.seconds += dt; }
     events(events) { for (const event of events) observation.events[event.type] = (observation.events[event.type] || 0) + 1; }
     unlockAudio() {}
   }
   const document = { hidden, hasFocus: () => focused, documentElement: element(), body: element(),
     getElementById(id) { if (!elements.has(id)) elements.set(id, element()); return elements.get(id); },
     querySelector() { return element(); }, querySelectorAll() { return []; }, addEventListener(type, fn) { addEvent(documentEvents, type, fn); } };
-  const context = vm.createContext({ ...environment, Worker, Renderer, document, navigator: {},
+  const context = vm.createContext({ ...environment, Game: PageGame, Worker, Renderer, document, navigator: {},
     window: { addEventListener(type, fn) { addEvent(windowEvents, type, fn); } }, localStorage: store(storage), sessionStorage: store(session),
     requestAnimationFrame(fn) { const id = ++nextTimer; animations.set(id, { fn, at: clock + 1000 / 60 }); return id; },
     cancelAnimationFrame(id) { animations.delete(id); }, researchBranches: [], researchGroup() {}, researchScene() { return ''; },
@@ -121,7 +128,7 @@ function noHandoff(page, identity) {
 }
 
 const initial = seedSave(), continuous = await page(initial), identity = continuous.game(), oracle = resume(initial);
-continuous.observation.frameObserver = dt => { oracle.tick(dt); oracle.events.length = 0; };
+continuous.observation.tickObserver = dt => { oracle.tick(dt); oracle.events.length = 0; };
 continuous.advance(2000); continuous.focus(false); continuous.advance(2000); continuous.hide(true);
 const beforeHidden = continuous.observation.draws;
 continuous.advance(60_000); const firstLiveSave = continuous.saved();
@@ -145,13 +152,47 @@ assert(manual.game().shotTime > shotBefore, 'A manually launched ball stopped wh
 assert(manual.observation.draws > drawsBefore, 'Manual hidden flight stopped rendering');
 manual.hide(false); manual.focus(true); noHandoff(manual, manualIdentity); manual.destroy();
 
-const menu = await page(initial); menu.openModal('settings'); menu.save();
-assert.equal(menu.saved().run.paused, false, 'Opening settings persisted an unintended manual pause');
+const menu = await page(initial), menuOracle = resume(initial); menu.openModal('tech'); menu.save();
+menu.observation.tickObserver = dt => { menuOracle.tick(dt); menuOracle.events.length = 0; };
+assert.equal(menu.saved().run.paused, false, 'Opening research persisted an unintended manual pause');
 assert(!menu.game().paused, 'The menu paused enabled automatic play');
 menu.advance(30_000); const menuFirst = menu.game().profile.earned;
+const menuTicks = menu.observation.ticks, menuDraws = menu.observation.draws;
+assert(menuTicks > 1700, 'Research reduced the foreground physics clock below 60 Hz');
+assert(menuDraws > 300 && menuDraws <= 30 * presentation.menuFPS + 1, 'Research did not preserve visible animation within its render budget');
+assert(menuTicks > menuDraws * 3, 'Research drawing still competes with every physics frame');
 menu.focus(false); menu.hide(true); menu.advance(30_000); menu.hide(false); menu.focus(true);
 assert(menu.game().profile.earned > menuFirst, 'Automatic play stopped behind the menu');
+assert.equal(menu.observation.renders, menu.observation.draws, 'Menu scene updates and actual render calls diverged');
+compareProgress(menu.game(), menuOracle, 'Automatic physics while research uses fewer visual frames');
 assert(!menu.game().paused, 'Returning changed the menu Auto policy'); menu.closeModal(); assert(!menu.game().paused); menu.destroy();
+
+function assertResultAction(page, action, emphasis) {
+  const html = page.elements.get('arena-overlay').innerHTML;
+  const button = [...html.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/g)].find(match => match[1].includes(`data-action="${action}"`));
+  assert(button, `Settlement is missing ${action}`);
+  assert(button[1].includes(`class="${emphasis}-button"`), `Settlement should emphasize ${action} as ${emphasis}`);
+}
+function finishManualRun(page) {
+  page.onAction('launch', { angle: .4, power: 1 });
+  assert.equal(page.game().state, 'flying', 'Manual settlement fixture did not launch');
+  for (let guard = 0; page.game().state === 'flying' && guard < 200; guard++) page.advance(250);
+  assert.equal(page.game().state, 'ready', 'Manual settlement fixture did not finish its shot');
+  page.action('cashout');
+  assert.equal(page.game().state, 'ended', 'Player cashout did not reach settlement');
+}
+const settlement = await page(seedSave({ auto: false }));
+finishManualRun(settlement);
+assertResultAction(settlement, 'tech', 'primary'); assertResultAction(settlement, 'restart', 'secondary');
+settlement.openModal('settings'); settlement.closeModal();
+assertResultAction(settlement, 'tech', 'primary');
+settlement.openModal('tech'); settlement.closeModal();
+assertResultAction(settlement, 'tech', 'secondary'); assertResultAction(settlement, 'restart', 'primary');
+const reviewedRun = settlement.game().run;
+settlement.action('restart'); assert.notEqual(settlement.game().run, reviewedRun, 'Continue reused the previous run');
+finishManualRun(settlement);
+assertResultAction(settlement, 'tech', 'primary'); assertResultAction(settlement, 'restart', 'secondary');
+settlement.destroy();
 
 const paused = await page(seedSave({ paused: true })); paused.openModal('settings'); paused.hide(true); paused.advance(60_000); paused.hide(false); paused.closeModal();
 assert(paused.game().paused, 'Explicit manual pause was lost'); assert.equal(paused.game().profile.earned, 0, 'Manual pause earned income');
@@ -185,9 +226,11 @@ const report = { generatedAt: new Date().toISOString(), actualPageFrameLoopAndCl
   sameGameAcrossFocusAndVisibility: 'pass', loadingHandoffRemoved: 'pass', clockWorkerHasNoGameState: 'pass',
   fiveMinutesContinuousNoReturnReplay: 'pass', liveSaveIncome: 'pass', manualFlightInBackground: 'pass',
   hiddenSceneUpdateAndRender: 'pass', rafAndTimerSingleClock: 'pass', automaticMenuPolicy: 'pass',
+  researchMenuSimulationAndRenderBudget: 'pass', settlementUpgradeThenContinue: 'pass', newRunRestoresUpgradeEmphasis: 'pass',
   manualPause: 'pass', failedRunAutoRestartAndDrops: 'pass', noRetroactiveAutoIncome: 'pass',
   frozenIntervalSkippedAndLiveResume: 'pass', oldSaveNoReplay: 'pass', missingAndStalledWorkerFallback: 'pass',
   explicitChapterChoice: 'pass', incomeBeforeReturning: incomeBeforeReturn, hiddenRenderCalls: drawBeforeReturn - beforeHidden,
+  researchMenuThirtySeconds: { simulationTicks: menuTicks, renderCalls: menuDraws },
   scope: 'Deterministic integration: actual production scripts with mocked browser scheduler, DOM and renderer. Does not establish browser throttling, GPU output or audible playback.' };
 if (!process.argv.includes('--no-report')) fs.writeFileSync(new URL('../reports/idle-session-check.json', import.meta.url), JSON.stringify(report, null, 2));
 console.log(JSON.stringify(report, null, 2));

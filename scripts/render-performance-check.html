@@ -1,0 +1,52 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>Renderer performance check</title>
+<style>body{font:14px system-ui;color:#28344c;background:white}#host{width:900px;height:900px;position:relative}canvas{position:absolute}pre{white-space:pre-wrap}</style>
+<h1>Renderer performance check</h1><p>Real WebGL submission times. Identical seeded combat, independent memory progress; no save access or audio.</p>
+<div id="host"></div><pre id="report">Running…</pre>
+<script type="module">
+import data from '/src/data/balance.json';
+import { Game, createProfile } from '/src/game.js';
+import { Renderer } from '/src/renderer.js';
+const report = { scope: 'CPU submission to real WebGL, not GPU completion time', cases: [], errors: [] };
+const paint = () => new Promise(resolve => { const timer=setTimeout(resolve,50); requestAnimationFrame(()=>{clearTimeout(timer);resolve();}); });
+const quantile = (values, q) => [...values].sort((a,b)=>a-b)[Math.floor((values.length-1)*q)];
+async function run(RendererClass, name, chapter, menu) {
+  const balance = structuredClone(data);
+  // Fixed stress fixture; progression changes do not alter the renderer comparison.
+  balance.chapters.forEach((c,i)=>{c.hp=[1,60,25000,5600000,450000000][i];});
+  const profile = createProfile(); profile.chapter = chapter; profile.unlockedChapter = 4;
+  profile.relics = balance.relics.map(r=>r.id); profile.settings.sound = profile.settings.music = false;
+  profile.upgrades = {...balance.previews.endgame.upgrades};
+  const game = new Game(balance, profile, 54157);
+  game.buffs = {...balance.previews.endgame.buffs};
+  const started = performance.now(), host=document.querySelector('#host');
+  const view = await new RendererClass(game, host, ()=>{}).init(); view.app.stop(); view.menuOpen = menu;
+  const initializationMs=performance.now()-started;
+  const rebuilds=[];
+  for(let i=0;i<3;i++){const t=performance.now();view.rebuild();rebuilds.push(performance.now()-t);}
+  const timings=[], physics=[], events=[], draws=[]; let renderTime=0, peakRings=0, peakEvents=0;
+  game.events.length=0; // Initialization/rebuild cost is measured separately from combat.
+  game.launch(game.autoAngle(),1,false);
+  for(let i=0;i<120;i++) {
+    const started=performance.now(); game.tick(1/60); physics.push(performance.now()-started);
+    const batch=game.events.splice(0); peakEvents=Math.max(peakEvents,batch.length);
+    const e=performance.now();view.events(batch);events.push(performance.now()-e);
+    renderTime+=1/60;const d=performance.now();
+    if(!menu || name==='baseline' || renderTime>=1/15){view.render(renderTime);view.app.render();renderTime=0;draws.push(performance.now()-d);}
+    peakRings=Math.max(peakRings,view.rings.length);timings.push(performance.now()-started);
+    await paint();
+  }
+  const result={name,chapter:chapter+1,menu,initializationMs:+initializationMs.toFixed(2),rebuildMedianMs:+quantile(rebuilds,.5).toFixed(2),frameMedianMs:+quantile(timings,.5).toFixed(2),frameP95Ms:+quantile(timings,.95).toFixed(2),frameMaxMs:+Math.max(...timings).toFixed(2),physicsP95Ms:+quantile(physics,.95).toFixed(2),eventsP95Ms:+quantile(events,.95).toFixed(2),drawP95Ms:+quantile(draws,.95).toFixed(2),drawCalls:draws.length,peakRings,peakEvents,blocksBroken:game.run.kills,combo:game.combo};
+  view.resizeObserver.disconnect();view.audio.destroy();view.app.destroy(true,{children:true,context:true});
+  return result;
+}
+try {
+  const variants=[];
+  if(new URLSearchParams(location.search).has('compare'))variants.push(['baseline',(await import('/scripts/render-baseline.tmp.js')).Renderer]);
+  variants.push(['optimized',Renderer]);
+  for(const [name,Class] of variants)for(const [chapter,menu] of [[2,false],[4,false],[2,true]]) {
+    report.phase = {name, chapter, menu}; document.querySelector('#report').textContent=JSON.stringify(report,null,2); report.cases.push(await run(Class,name,chapter,menu)); document.querySelector('#report').textContent=JSON.stringify(report,null,2);
+  }
+} catch(error){report.errors.push(error.stack||String(error));}
+document.querySelector('#report').textContent=JSON.stringify(report,null,2);
+document.documentElement.dataset.done='true';
+</script></html>

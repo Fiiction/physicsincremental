@@ -1,0 +1,6 @@
+{
+  "menuFPS": 15,
+  "ringLimit": 160,
+  "menuRingLimit": 40,
+  "eliteColors": ["#ff697f", "#ffaf57", "#f6de66", "#61d8a1", "#63c8ef", "#8884ee", "#d67dde"]
+}
