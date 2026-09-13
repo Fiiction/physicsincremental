@@ -468,6 +468,9 @@ function syncBackground() {
 }
 document.addEventListener('visibilitychange', syncBackground);
 updateUI();
+// Pixi's lazy renderer chunks import shared exports from the built entry.
+// Let that entry finish evaluating before waiting for renderer initialization.
+async function start() {
 try { view = await new Renderer(game, $('canvas-host'), onAction).init(); updateUI(); }
 catch (error) { console.error(error); $('canvas-host').innerHTML = '<div class="graphics-error"><h2>画面初始化未完成</h2><p>请使用支持 WebGL 的浏览器，并开启硬件加速后刷新。</p></div>'; }
 if (view && document.hidden) syncBackground();
@@ -484,3 +487,5 @@ if (modelContext?.registerTool) {
   register({ name: 'leave_mechanic_preview', description: '结束机制试玩，恢复正式开采进度。', inputSchema: { type: 'object', properties: {}, additionalProperties: false }, annotations: { readOnlyHint: false }, execute: () => ({ restored: leavePractice(), ...window.corebound.getState() }) });
   register({ name: 'start_treasure_preview', description: '进入独立宝库试玩，选择一种真实稀有强化；保留正式进度。', inputSchema: { type: 'object', properties: { effect: { type: 'string', enum: ['overdrive','arc','rift'] } }, required: ['effect'], additionalProperties: false }, annotations: { readOnlyHint: false }, execute: input => { if (!data.drops.some(d=>d.elite && d.id===input?.effect)) throw new Error('请选择一种高级宝库强化'); practiceDrop=input.effect; return { started: startPractice(data.previews.treasure.chapter,'treasure'), ...window.corebound.getState() }; } });
 }
+}
+void start();
