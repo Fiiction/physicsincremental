@@ -50,31 +50,35 @@ migrated.auto=true;advanceElapsed(migrated,60);
 assert.equal(migrated.profile.coins,wallet);assert(migrated.pendingChapterSelection);
 assert(migrated.selectChapter(migrated.profile.frontierChapter));assert(migrated.run.bossVersion>=1);
 
-// Resume a real, damaged boss through the same worker used by hidden browser tabs.
+// Run real boss physics continuously in the browser worker; old timestamps must not replay.
 const background=chamber(0,{power:7,kinetic:10,idle:1});background.auto=true;background.launch(0,1);
 const workerURL=new URL('../src/idle-worker.js',import.meta.url).href;
 const worker=new Worker(`const {parentPort}=require('node:worker_threads');global.self={};global.postMessage=m=>parentPort.postMessage(m);parentPort.on('message',data=>self.onmessage({data}));import(${JSON.stringify(workerURL)}).then(()=>parentPort.postMessage({ready:true}));`,{eval:true});
 const started=Date.now()-8000;
-let packet;
+let packet, finishTimer;
 try {
   packet=await new Promise((resolve,reject)=>{
     const timeout=setTimeout(()=>reject(new Error('Boss background handoff timed out')),10000);
     worker.on('error',error=>{clearTimeout(timeout);reject(error);});
     worker.on('message',message=>{
-      if(message.ready)worker.postMessage({type:'start',epoch:1,balance:data,profile:structuredClone(background.profile),run:background.snapshot(),through:started});
+      if(message.ready) {
+        worker.postMessage({type:'start',epoch:1,balance:data,profile:structuredClone(background.profile),run:background.snapshot(),through:started});
+        finishTimer=setTimeout(()=>worker.postMessage({type:'finish'}),550);
+      }
       else if(message.finished){clearTimeout(timeout);resolve(message);}
-      else worker.postMessage({type:'finish'});
     });
   });
-} finally { await worker.terminate(); }
-advanceElapsed(background,(packet.through-started)/1000);
+} finally { clearTimeout(finishTimer); await worker.terminate(); }
+assert(packet.runtime.simulatedSeconds>=.4&&packet.runtime.simulatedSeconds<2,'Worker replayed the old boss timestamp or did not run');
+assert.equal(packet.runtime.interruptedSeconds,0,'Ordinary boss worker ticks were discarded');
+advanceElapsed(background,packet.runtime.simulatedSeconds);
 const backgroundBoss=packet.run.blocks.find(b=>b.type==='boss');
-assert(background.run.bossDamage>0,'Background boss trial never dealt real damage');
+assert(background.run.bossDamage>0,'Background boss simulation never dealt real damage');
 assert.equal(backgroundBoss.hp,background.boss.hp,'Background boss damage diverged');
 assert.equal(backgroundBoss.rotation,background.boss.rotation,'Background boss rotation diverged');
 assert.equal(packet.run.run.bossShots,background.run.bossShots,'Boss handoff duplicated a shot');
 assert.equal(packet.profile.coins,background.profile.coins,'Boss handoff duplicated a reward');
 
-const report={generatedAt:new Date().toISOString(),fixedHealth:'pass',realBossCollision:'pass',activeSaveResume:'pass',failureResetsBoss:'pass',noExtraShots:'pass',highSpeedLargeBlock:'pass',legacyRewardAndPendingChoice:'pass',activeBossBackgroundWorker:'pass',note:'Real boss collisions, save continuity and worker handoff; no player-facing trial mode.'};
+const report={generatedAt:new Date().toISOString(),fixedHealth:'pass',realBossCollision:'pass',activeSaveResume:'pass',failureResetsBoss:'pass',noExtraShots:'pass',highSpeedLargeBlock:'pass',legacyRewardAndPendingChoice:'pass',activeBossBackgroundWorker:'pass',workerLiveSeconds:packet.runtime.simulatedSeconds,oldWorkerTimestampIgnored:'pass',note:'Real boss collisions, save continuity and continuous live worker handoff; no frozen-time replay or player-facing trial mode.'};
 fs.writeFileSync(new URL('../reports/boss-check.json',import.meta.url),JSON.stringify(report,null,2));
 console.log(JSON.stringify(report,null,2));

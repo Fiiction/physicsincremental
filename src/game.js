@@ -176,7 +176,8 @@ export class Game {
       const hp = Math.round(nativeHP * reinforcement * 100) / 100;
       const supplyIndex = supplies.findIndex(([sx, sy]) => x === c + sx && y === c + sy);
       const supply = type === 'gold' ? supplyIndex >= 0 ? ['split','boost','shock','pierce'][supplyIndex % 4] : this.rollChest() : null;
-      this.blocks.push({ id: y * n + x, gx: x, gy: y, x: x * s, y: y * s, ring, tier, hp, maxHP: hp, ...(reinforcement>1 ? {percentDamageHP:nativeHP} : {}), type, supply, native: true, loot: 1, alive: true });
+      const percentDamageScale = this.chapter.percentDamageScale ?? 1;
+      this.blocks.push({ id: y * n + x, gx: x, gy: y, x: x * s, y: y * s, ring, tier, hp, maxHP: hp, ...(reinforcement>1 || percentDamageScale<1 ? {percentDamageHP:nativeHP*percentDamageScale} : {}), type, supply, native: true, loot: 1, alive: true });
     }
     this.generateElites();
     // A grid is enough for this fixed 19×19 arena; no general-purpose physics scene is needed.

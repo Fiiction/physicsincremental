@@ -29,6 +29,7 @@ export class Renderer {
   async init() {
     this.app = new Application();
     await this.app.init({ width: 608, height: 608, antialias: true, backgroundAlpha: 0, resolution: Math.min(window.devicePixelRatio || 1, 2), autoDensity: true, preference: 'webgl', powerPreference: 'high-performance' });
+    this.app.canvas.style.width = this.app.canvas.style.height = '100%';
     this.host.append(this.app.canvas);
     BitmapFont.install({ name: 'ComboDigits', style: { fontFamily: 'Arial', fontSize: 40, fontWeight: '800', fill: '#28344c', stroke: { color: '#ffffff', width: 5 } }, chars: '0123456789×', resolution: 2, padding: 4 });
     this.hudScale = 1;

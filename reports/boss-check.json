@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-13T11:11:18.639Z",
+  "generatedAt": "2026-09-13T13:46:50.495Z",
   "fixedHealth": "pass",
   "realBossCollision": "pass",
   "activeSaveResume": "pass",
@@ -8,5 +8,7 @@
   "highSpeedLargeBlock": "pass",
   "legacyRewardAndPendingChoice": "pass",
   "activeBossBackgroundWorker": "pass",
-  "note": "Real boss collisions, save continuity and worker handoff; no player-facing trial mode."
+  "workerLiveSeconds": 0.561,
+  "oldWorkerTimestampIgnored": "pass",
+  "note": "Real boss collisions, save continuity and continuous live worker handoff; no frozen-time replay or player-facing trial mode."
 }
