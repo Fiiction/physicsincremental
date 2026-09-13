@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Combo 冷路径检查</title>
+<style>
+  body { margin: 18px; color: #28344c; background: white; font: 14px/1.5 system-ui, sans-serif; }
+  h1 { font-size: 22px; margin-bottom: 6px; }
+  #status { font-weight: 700; }
+  table { border-collapse: collapse; margin: 16px 0; }
+  td, th { text-align: left; padding: 5px 12px; border-bottom: 1px solid #ddd; }
+  .pass { color: #167344; } .fail { color: #bd283a; }
+  #canvas-host { width: 768px; height: 768px; }
+  canvas { display: block; }
+  pre { white-space: pre-wrap; font-size: 12px; }
+</style>
+<h1>Combo 冷路径检查</h1>
+<p>独立内存存档；不读取或写入玩家存档，不启动音频。此页直接设置 Combo，检查真实 WebGL 绘制；不代表物理或数值测试。耗时为 CPU 提交时间，不是 GPU 完成时间。</p>
+<p id="status" role="status">检查中……</p>
+<table><thead><tr><th>场景</th><th>结果</th><th>边界遍历 / 文字测量 / 像素读取</th><th>编译 / 帧缓冲 / MSAA 分配</th><th>提交 ms</th></tr></thead><tbody id="rows"></tbody></table>
+<div id="canvas-host"></div>
+<pre id="report"></pre>
+<script type="module">
+  import data from '/src/data/balance.json';
+  import { Game, createProfile } from '/src/game.js';
+  import { Renderer } from '/src/renderer.js';
+  import { Text } from 'pixi.js';
+
+  const report = { kind: 'real-WebGL-presentation-only', persistentStorageUsed: false, cases: [], preparations: [], errors: [] };
+  const keys = ['bounds', 'textBounds', 'pixelReads', 'compileShader', 'createFramebuffer', 'renderbufferStorageMultisample'];
+  let counts = Object.fromEntries(keys.map(key => [key, 0]));
+  const restores = [];
+  const paint = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  function wrap(target, method, key) {
+    if (typeof target?.[method] !== 'function') return;
+    const own = Object.getOwnPropertyDescriptor(target, method), original = target[method];
+    target[method] = function (...args) { counts[key]++; return original.apply(this, args); };
+    restores.push(() => own ? Object.defineProperty(target, method, own) : delete target[method]);
+  }
+  function measure(action) {
+    counts = Object.fromEntries(keys.map(key => [key, 0]));
+    const started = performance.now(); action();
+    return { ...counts, submissionMs: +(performance.now() - started).toFixed(2) };
+  }
+  function record(name, result, baseline = false) {
+    const passed = result.effectEnabled && (baseline ? result.bounds > 0 && result.textBounds > 0 && result.pixelReads > 0 : keys.every(key => result[key] === 0));
+    const entry = { name, baseline, passed, ...result };
+    report.cases.push(entry);
+    const row = document.createElement('tr');
+    for (const text of [name, passed ? 'PASS' : 'FAIL', `${result.bounds} / ${result.textBounds} / ${result.pixelReads}`, `${result.compileShader} / ${result.createFramebuffer} / ${result.renderbufferStorageMultisample}`, result.submissionMs]) {
+      const cell = document.createElement('td'); cell.textContent = text; row.append(cell);
+    }
+    row.className = passed ? 'pass' : 'fail'; document.getElementById('rows').append(row);
+  }
+  try {
+    const profile = createProfile(); profile.settings.sound = false; profile.settings.music = false;
+    const game = new Game(data, profile, 20260914);
+    const host = document.getElementById('canvas-host');
+    const view = await new Renderer(game, host, () => {}).init();
+    view.app.stop(); view.resizeObserver.disconnect();
+    // Exercise the actual filter even if this test browser requests reduced motion.
+    view.reducedMotion = { matches: false };
+    // Establish the ordinary resting scene before measuring the Combo transition.
+    view.render(0); view.app.render(); await paint();
+    const gl = view.app.renderer.gl;
+    report.context = { version: gl.getParameter(gl.VERSION), pixelRatio: devicePixelRatio };
+    wrap(view.world, 'getFastGlobalBounds', 'bounds');
+    wrap(Text.prototype, 'updateBounds', 'textBounds');
+    wrap(CanvasRenderingContext2D.prototype, 'getImageData', 'pixelReads');
+    for (const key of keys.slice(3)) wrap(gl, key, key);
+    const simulationBefore = { coins: profile.coins, runs: profile.runs, kills: profile.totalKills };
+    async function combo(name, number, shake = 0) {
+      game.state = 'flying'; game.combo = number; view.shake = shake;
+      const result = measure(() => { view.render(1 / 60); view.app.render(); });
+      record(name, { ...result, effectEnabled: view.comboFilter.enabled, dispersion: view.dispersionStrength });
+      await paint();
+    }
+    function reset(name) {
+      game.newRun(); game.events.length = 0;
+      report.preparations.push({ name, ...measure(() => { view.rebuild(); view.render(0); view.app.render(); }) });
+    }
+
+    await combo('首局首次 Combo 10', 10);
+    await combo('首局 Combo 11', 11);
+    await combo('首局 Combo 40 + 震屏', 40, 10);
+    game.state = 'ready';
+    for (let i = 0; i < 90; i++) { view.render(1 / 60); view.app.render(); }
+    report.fadeEnded = !view.comboFilter.enabled && view.effectStrength === 0 && view.dispersionStrength === 0;
+    await combo('同局消退后再次触发', 10);
+    for (let round = 2; round <= 3; round++) {
+      reset(`第 ${round} 局准备`);
+      await combo(`第 ${round} 局首次 Combo 10`, 10);
+      await combo(`第 ${round} 局 Combo 11 + 震屏`, 11, 10);
+    }
+    for (const size of [512, 1024, 900]) {
+      game.state = 'ready'; game.combo = 0;
+      host.style.width = host.style.height = `${size}px`;
+      report.preparations.push({ name: `调整至 ${size}px`, ...measure(() => view.resize()) });
+      const actual = { css: size, width: view.app.canvas.width, height: view.app.canvas.height, expected: Math.round(size * devicePixelRatio) };
+      actual.passed = actual.width === actual.expected && actual.height === actual.expected;
+      (report.canvasSizes ||= []).push(actual);
+      reset(`${size}px 新局准备`);
+      await combo(`${size}px 首次 Combo 10`, 10);
+      await combo(`${size}px Combo 11 + 震屏`, 11, 10);
+    }
+
+    // Recreate each label, then remove only the explicit filter bounds for one draw.
+    // This reproduces the former synchronous trim scan without bypassing warmCombo.
+    reset('旧边界路径对照准备');
+    game.state = 'flying'; game.combo = 11; view.render(1 / 60);
+    const area = view.world.filterArea;
+    try {
+      view.world.filterArea = null;
+      const result = measure(() => view.app.render());
+      record('旧边界路径对照（应出现像素扫描）', { ...result, effectEnabled: view.comboFilter.enabled }, true);
+    } finally { view.world.filterArea = area; }
+    reset('恢复固定边界');
+    await combo('对照后恢复：首次 Combo 11', 11);
+    report.simulationUnchanged = JSON.stringify(simulationBefore) === JSON.stringify({ coins: profile.coins, runs: profile.runs, kills: profile.totalKills });
+    report.passed = report.cases.every(test => test.passed) && report.canvasSizes.every(size => size.passed) && report.fadeEnded && report.simulationUnchanged;
+  } catch (error) {
+    report.passed = false; report.errors.push(error.stack || String(error));
+  } finally {
+    for (const restore of restores.reverse()) restore();
+    document.getElementById('status').textContent = report.passed ? 'PASS · 正式触发没有边界扫描、着色器编译或帧缓冲 / MSAA 分配' : 'FAIL · 请查看报告';
+    document.getElementById('status').className = report.passed ? 'pass' : 'fail';
+    document.getElementById('report').textContent = JSON.stringify(report, null, 2);
+    document.documentElement.dataset.result = report.passed ? 'pass' : 'fail';
+  }
+</script>
+</html>

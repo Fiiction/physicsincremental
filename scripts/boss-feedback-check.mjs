@@ -22,7 +22,7 @@ function chamber(chapter) {
   const renderer = Object.assign(Object.create(Renderer.prototype), {
     game, audio: new GameAudio(audioConfig), blockLayer: new Container(), blockViews: new Map(), bossBackdrop: new Graphics(),
     rings: [], floaters: [], comboTexts: [], cashFlights: new Set(), particles: [],
-    mechanismSeen: new Set(), reducedMotion: { matches: false }, updateComboSpectrum() {}
+    mechanismSeen: new Set(), reducedMotion: { matches: false }, updateComboSpectrum() {}, warmCombo() {}
   });
   renderer.rebuild();
   return { game, renderer, boss: game.boss };
@@ -51,7 +51,8 @@ for (let chapter = 0; chapter < data.chapters.length; chapter++) {
   const bands = paintedFills(view), originalGeometry = geometry(game);
   assert(bands.every(p => p.color !== 0xffffff), 'Healthy boss has a false white damage core');
   for (const damage of [.1, .25, .5, .9]) {
-    hit(game, 1, 0, false, boss.hp - boss.maxHP * (1 - damage));
+    // Later guardians amplify direct contact; target the same actual HP loss in every chapter.
+    hit(game, 1, 0, false, (boss.hp - boss.maxHP * (1 - damage)) / game.bossRules.directDamageMultiplier);
     deliver(game, renderer); renderer.updateBossBody(view);
     const painted = paintedFills(view), hole = painted.at(-1);
     assert.equal(hole.color, 0xffffff);

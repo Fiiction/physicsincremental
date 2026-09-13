@@ -1,4 +1,4 @@
-import { Application, Container, Graphics, Sprite, Text, BitmapFont, BitmapText, Texture, ParticleContainer, Particle } from 'pixi.js';
+import { Application, Container, Graphics, Sprite, Text, BitmapFont, BitmapText, Texture, ParticleContainer, Particle, Rectangle } from 'pixi.js';
 import { createComboFilter, comboEffectStrength } from './combo-filter.js';
 import { GameAudio } from './audio.js';
 import audioConfig from './data/audio.json' with { type: 'json' };
@@ -35,6 +35,8 @@ export class Renderer {
     this.app.canvas.setAttribute('tabindex', '0');
     this.world = new Container(); this.app.stage.addChild(this.world);
     this.comboFilter = createComboFilter(); this.world.filters = [this.comboFilter];
+    // The effect covers the arena, so never measure hundreds of trimmed text bounds.
+    this.world.filterArea = new Rectangle(0, 0, 608, 608);
     this.bossBackdrop = new Graphics(); this.world.addChild(this.bossBackdrop);
     this.blockLayer = new Container(); this.world.addChild(this.blockLayer);
     this.under = new Graphics(); this.world.addChild(this.under);
@@ -86,6 +88,23 @@ export class Renderer {
       this.comboFontResolution = fontResolution;
       for (const f of this.comboTexts) f.node.onViewUpdate();
     }
+    if (this.blockViews.size) this.warmCombo();
+  }
+  warmCombo() {
+    const filter = this.comboFilter, uniforms = filter.resources.spectrum.uniforms;
+    const enabled = filter.enabled, shift = uniforms.uShift, hue = uniforms.uHue;
+    const config = this.game.data.effects.comboFX;
+    filter.padding = Math.ceil(config.dispersionStrength * config.shiftPerStrength * this.sceneScale) + 2;
+    this.world.filterArea.x = -this.world.x; this.world.filterArea.y = -this.world.y;
+    try {
+      // A real neutral pass prepares the shader, uniforms and full-size MSAA target.
+      // No simulation, sound or visible tint is produced by this preparation.
+      filter.enabled = true; uniforms.uShift = 0; uniforms.uHue = 0;
+      this.app.render();
+    } finally {
+      filter.enabled = enabled; uniforms.uShift = shift; uniforms.uHue = hue;
+    }
+    this.app.render();
   }
   color(b) {
     const palette = this.game.chapter.palette;
@@ -112,6 +131,7 @@ export class Renderer {
       this.rings.push({ x: boss.x + 16, y: boss.y + 16, size: boss.size, rotation: boss.rotation,
         life: Math.min(max, this.game.bossVictoryLeft), max, palette: [...this.game.chapter.palette], bossEffect: 'defeat' });
     }
+    this.warmCombo();
   }
   addBlock(b) {
     const container = new Container(); container.position.set(b.x + 16, b.y + 16);
@@ -442,7 +462,8 @@ export class Renderer {
     }
     const radius = this.dispersionStrength * config.shiftPerStrength * (this.sceneScale || 1);
     this.comboFilter.enabled = this.effectStrength > 0 || this.dispersionStrength > 0;
-    this.comboFilter.padding = Math.ceil(radius) + 2;
+    // Keep the same texture-pool size during the rise, steady effect and fade.
+    this.comboFilter.padding = Math.ceil(config.dispersionStrength * config.shiftPerStrength * (this.sceneScale || 1)) + 2;
     this.comboFilter.resources.spectrum.uniforms.uShift = radius;
     this.comboFilter.resources.spectrum.uniforms.uHue = this.effectStrength * config.hueDegreesPerStrength * Math.PI / 180;
     const atmosphere = this.atmosphere ||= document.getElementById('combo-atmosphere');
@@ -543,6 +564,7 @@ export class Renderer {
     this.shake = Math.max(0, (this.shake || 0) - dt * 22);
     const shake = !this.gentleEffects && game.profile.settings.shake ? this.shake * game.data.effects.shake / 4 : 0;
     this.world.position.set((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+    this.world.filterArea.x = -this.world.x; this.world.filterArea.y = -this.world.y;
     if (game.portals.length) {
       game.portals.forEach((p, i) => {
         const col = i ? 0x459cad : 0x9270cc;
